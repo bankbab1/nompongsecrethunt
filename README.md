@@ -2,15 +2,28 @@
 
 A browser-based hidden-role treasure hunt with Nompong, an illustrated backyard, six random missions, three garden themes, action cards, and automatic local saves.
 
-## Play locally
+## Stack
 
-No dependencies or build step required. Serve the game with:
+Vite 8 · React 19 · TypeScript 6 (strict) · Tailwind CSS 4 · zustand 5 · Vitest 5 — the same stack as nompong-studio.
+
+## Develop
 
 ```sh
-python -m http.server 8080 --directory dist
+npm install
+npm run dev        # http://localhost:5230
+npm test           # rules engine + app smoke tests
+npm run build      # static site in dist/ (relative base, host anywhere)
 ```
 
-Open http://localhost:8080 in your browser.
+## Layout
+
+| Path | What lives there |
+| --- | --- |
+| `src/game/` | Pure rules engine: types, constants, `createGame`, `applyMove`, `isLegal`, and the computer player (`bot.ts`). No React, no DOM; randomness is injected so games are reproducible in tests. |
+| `src/store/gameStore.ts` | zustand store: the game plus UI state (selected card, rotation, preview, modals, toasts). Saves to `localStorage` under `nompong-hunt-v1`. |
+| `src/components/` | React UI: scene, board, hand, side panels, dialogs. `art/` holds the SVG illustrations. |
+| `src/styles/` | Tailwind entry and garden palette tokens. |
+| `legacy/` | The original single-file vanilla JS prototype, kept for reference. |
 
 ## Game modes
 
@@ -18,11 +31,3 @@ Open http://localhost:8080 in your browser.
 - 3–6 player pass-and-play on one device with private handoffs
 
 Online multiplayer rooms are not implemented yet. Game state is stored in the browser, so pass-and-play privacy depends on players respecting the handoff screen.
-
-## Source
-
-- `dist/index.html`: game interface
-- `dist/style.css`: responsive layout and garden styling
-- `dist/game.js`: game rules, computer turns, rendering, and persistence
-
-The `dist` directory contains the editable source and can be hosted directly as a static website.

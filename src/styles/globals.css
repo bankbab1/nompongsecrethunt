@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid #8a9e4d;
+  outline-offset: 3px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+/* The board tilts back a little, like a garden seen from the porch. */
+.board-tilt {
+  transform: perspective(1200px) rotateX(16deg);
+}
+
+/* Moonlight and blossom worlds recolour the backdrop rather than redrawing it. */
+.theme-night .garden-backdrop {
+  filter: hue-rotate(42deg) saturate(0.55) brightness(0.55);
+}
+.theme-pink .garden-backdrop {
+  filter: hue-rotate(280deg) saturate(0.65);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

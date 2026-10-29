@@ -1,57 +1,115 @@
 /** Edge bitmask for a trail tile: 1 = up, 2 = right, 4 = down, 8 = left. */
 export type Mask = number
 
-export type ActionType = 'sniff' | 'squirrel' | 'treat' | 'dig'
-export type Card = { type: 'trail'; mask: Mask } | { type: ActionType }
+/** The three things a sneaky pup can spoil. While any is broken, a pup can't lay trails. */
+export type Tool = 'leash' | 'nose' | 'paw'
 
-export type Role = 'hunter' | 'mischief'
+export type Card =
+  | { type: 'path'; mask: Mask; dead: boolean }
+  | { type: 'sniff' }
+  | { type: 'dig' }
+  | { type: 'break'; tool: Tool }
+  | { type: 'fix'; tools: Tool[] }
+
+export type CardType = Card['type']
+
+export type Role = 'hunter' | 'sneaky'
 export type Mode = 'solo' | 'local'
 export type Theme = 'garden' | 'night' | 'pink'
-export type Winner = 'hunters' | 'mischief'
+export type Side = 'hunters' | 'sneaky'
+export type Phase = 'playing' | 'roundOver' | 'matchOver'
+export type GoalContent = 'treasure' | 'rock'
+
+export type PersonaId = 'mochi' | 'biscuit' | 'pepper' | 'coco' | 'milo' | 'taro'
+
+export interface LootCard {
+  value: 1 | 2 | 3
+  /** Index into LOOT_ITEMS[value]. */
+  item: number
+}
 
 export interface Player {
   name: string
+  /** Computer dogs have a persona; human players don't. */
+  persona: PersonaId | null
   role: Role
   hand: Card[]
-  blocked: boolean
+  broken: Tool[]
+  loot: LootCard[]
   color: string
 }
 
+export interface Tile {
+  mask: Mask
+  /** Dead-end tiles have open edges but a blocked centre, so the scent can't pass through. */
+  dead: boolean
+}
+
+export interface Claim {
+  by: number
+  goal: number
+  says: GoalContent
+}
+
+/**
+ * Log entries are stored as message keys plus parameters so the activity feed can be
+ * re-rendered in either language. `speaker` marks a line a dog says out loud.
+ */
 export interface LogEntry {
   icon: string
-  name: string
-  text: string
+  key: string
+  params: Record<string, string | number>
   time: number
+  speaker?: number
+}
+
+export interface RoundResult {
+  winner: Side
+  /** Player who connected the trail to the treasure. */
+  finder?: number
+  payouts: { player: number; loot: LootCard[] }[]
 }
 
 export interface GameState {
-  version: 1
-  hunt: number
+  version: 2
+  match: number
   mode: Mode
+  round: number
+  phase: Phase
+  /** What Nompong is hunting for this round (index into MISSIONS). */
   mission: number
-  /** Index (0–2) of the hiding spot that holds the treasure. */
+  /** Which hiding spot (0–2) holds it. */
   treasure: number
   theme: Theme
   turn: number
   deck: Card[]
-  /** Placed trail masks keyed by "x,y". */
-  board: Record<string, Mask>
-  /** Hiding spots that have been uncovered. */
+  lootDeck: LootCard[]
+  board: Record<string, Tile>
+  /** Hiding spots uncovered by the trail this round. */
   revealed: number[]
-  ended: boolean
-  winner?: Winner
+  /** knowledge[player][goal]: what that player privately sniffed. */
+  knowledge: (GoalContent | null)[][]
+  claims: Claim[]
+  /** Who pointed a paw at whom this round. */
+  accusations: { by: number; target: number }[]
+  /** suspicion[observer][target], 0–100. */
+  suspicion: number[][]
+  accusedThisTurn: boolean
+  /** Who opened this round; the next round starts with the dog after them. */
+  roundStarter: number
+  result?: RoundResult
   log: LogEntry[]
   players: Player[]
 }
 
-/** A move always spends the card at index `card` in the current player's hand. */
+/** A move spends the card at index `card` in the current player's hand and ends the turn. */
 export type Move =
-  | { kind: 'trail'; card: number; x: number; y: number; mask: Mask }
-  | { kind: 'sniff'; card: number }
-  | { kind: 'squirrel'; card: number; target: number }
-  | { kind: 'treat'; card: number; target: number }
+  | { kind: 'path'; card: number; x: number; y: number; flipped: boolean }
+  | { kind: 'sniff'; card: number; goal: number; claim: GoalContent | null }
   | { kind: 'dig'; card: number; x: number; y: number }
-  | { kind: 'discard'; card: number }
+  | { kind: 'break'; card: number; target: number }
+  | { kind: 'fix'; card: number; target: number }
+  | { kind: 'pass'; card: number }
 
 /** Returns an integer in [0, n). Injected so the rules stay deterministic under test. */
 export type Rng = (n: number) => number

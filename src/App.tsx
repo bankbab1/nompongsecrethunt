@@ -1,56 +1,60 @@
 import { useEffect, useRef, useState } from 'react'
-import { ActivityPanel, PartyPanel } from '@/components/SidePanels'
 import { Hand } from '@/components/Hand'
 import { Modals } from '@/components/Modals'
 import { Scene, type FloatingReaction } from '@/components/Scene'
+import { ActivityPanel, PartyPanel } from '@/components/SidePanels'
 import { cryptoRng } from '@/game/rules'
+import { useT } from '@/i18n'
 import { beep } from '@/lib/sound'
 import { useGameStore } from '@/store/gameStore'
 
-const BOT_DELAY_MS = 1000
+const BOT_DELAY_MS = 1100
 
 export function App() {
+  const t = useT()
   const game = useGameStore((s) => s.game)
   const modal = useGameStore((s) => s.modal)
   const sound = useGameStore((s) => s.sound)
   const toast = useGameStore((s) => s.toast)
-  const { openModal, playBotTurn, rotateCard, toggleSound, showToast } = useGameStore.getState()
+  const { openModal, playBotTurn, flipCard, toggleSound, showToast, setLang } = useGameStore.getState()
   const [reactions, setReactions] = useState<FloatingReaction[]>([])
   const [confetti, setConfetti] = useState<FloatingReaction[]>([])
-  const botPending = game.mode === 'solo' && !game.ended && game.turn !== 0
+  const botPending = game.mode === 'solo' && game.phase === 'playing' && game.players[game.turn].persona !== null
+
+  useEffect(() => {
+    document.documentElement.lang = t.lang
+  }, [t.lang])
 
   // Computer dogs take their turn after a short, slightly random pause.
   useEffect(() => {
     if (!botPending) return
-    const t = setTimeout(playBotTurn, BOT_DELAY_MS + cryptoRng(650))
-    return () => clearTimeout(t)
+    const timer = setTimeout(playBotTurn, BOT_DELAY_MS + cryptoRng(700))
+    return () => clearTimeout(timer)
   }, [botPending, game, playBotTurn])
 
   // Celebrate when the hunters find the treasure.
-  const celebrated = useRef(game.ended)
+  const celebrated = useRef(game.phase !== 'playing')
   useEffect(() => {
-    if (!game.ended) {
+    if (game.phase === 'playing') {
       celebrated.current = false
       return
     }
-    if (celebrated.current || game.winner !== 'hunters') return
+    if (celebrated.current || game.result?.winner !== 'hunters') return
     celebrated.current = true
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    setConfetti(
-      Array.from({ length: 25 }, (_, i) => ({ id: i, emoji: ['✦', '🐾', '🌼', '💛'][cryptoRng(4)], left: cryptoRng(100) })),
-    )
-    const t = setTimeout(() => setConfetti([]), 4500)
-    return () => clearTimeout(t)
-  }, [game.ended, game.winner])
+    setConfetti(Array.from({ length: 25 }, (_, i) => ({ id: i, emoji: ['✦', '🐾', '🌼', '💛'][cryptoRng(4)], left: cryptoRng(100) })))
+    const timer = setTimeout(() => setConfetti([]), 4500)
+    return () => clearTimeout(timer)
+  }, [game.phase, game.result])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
-      if (e.key.toLowerCase() === 'r' && !useGameStore.getState().modal && !target.matches('input, select, textarea')) rotateCard()
+      if (e.key.toLowerCase() === 'f' && !useGameStore.getState().modal && !target.matches('input, select, textarea')) flipCard()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [rotateCard])
+  }, [flipCard])
 
   const react = (emoji: string) => {
     const id = Date.now() + Math.random()
@@ -60,9 +64,11 @@ export function App() {
   }
 
   const startNew = () => {
-    if (botPending) return showToast('Let the pack finish its turn first.')
+    if (botPending) return showToast('toast.wait')
     openModal({ kind: 'setup' })
   }
+
+  const circle = 'grid size-8 place-items-center rounded-full border border-line text-base'
 
   return (
     <>
@@ -73,28 +79,24 @@ export function App() {
           </span>
           <span>
             NOMPONG
-            <span className="mt-1 block font-sans text-[8px] font-semibold tracking-[3px] lg:text-[9px]">THE SECRET HUNT</span>
+            <span className="mt-1 block font-sans text-[8px] font-semibold tracking-[3px] lg:text-[9px]">{t('brand.sub')}</span>
           </span>
         </a>
-        <nav className="flex items-center gap-1 text-xs text-muted sm:gap-3">
-          <span className="hidden items-center gap-2 md:flex">
-            <span className="size-1.5 rounded-full bg-sage" /> A little adventure, together
+        <nav className="flex items-center gap-2 text-xs text-muted">
+          <span className="mr-2 hidden items-center gap-2 md:flex">
+            <span className="size-1.5 rounded-full bg-sage" /> {t('header.tagline')}
           </span>
           <button
             type="button"
-            aria-label="Toggle sound"
-            aria-pressed={sound}
-            onClick={toggleSound}
-            className="ml-2 size-8 rounded-full border border-line text-base"
+            onClick={() => setLang(t.lang === 'th' ? 'en' : 'th')}
+            className="h-8 rounded-full border border-line px-3 text-xs font-medium"
           >
+            {t('header.lang')}
+          </button>
+          <button type="button" aria-label={t('header.sound')} aria-pressed={sound} onClick={toggleSound} className={circle}>
             {sound ? '♪' : '♫'}
           </button>
-          <button
-            type="button"
-            aria-label="How to play"
-            onClick={() => openModal({ kind: 'help' })}
-            className="ml-2 size-8 rounded-full border border-line text-base"
-          >
+          <button type="button" aria-label={t('header.help')} onClick={() => openModal({ kind: 'help' })} className={circle}>
             ?
           </button>
         </nav>
@@ -103,53 +105,51 @@ export function App() {
       <main className="mx-auto max-w-[1530px] px-3 pt-6 sm:px-[3%] sm:pt-7 lg:px-[5%] lg:pt-9">
         <section className="mb-5 flex items-start justify-between gap-3 sm:items-center lg:mb-8">
           <div>
-            <div className="text-[9px] font-bold tracking-[2px] text-subtle sm:text-[10px]">A COZY GAME OF TRUST & TROUBLE</div>
-            <h1 className="my-2 text-3xl font-extrabold tracking-[-1.2px] lg:text-[clamp(27px,3vw,43px)] lg:tracking-[-1.7px]">
-              Little paws. <em className="font-serif font-normal text-[#6c7f52]">Big secrets.</em>
+            <div className="text-[9px] font-bold tracking-[2px] text-subtle sm:text-[10px]">{t('intro.eyebrow')}</div>
+            <h1 className="my-2 text-3xl font-extrabold tracking-[-1px] lg:text-[clamp(27px,3vw,43px)]">
+              {t('intro.title1')} <em className="font-serif font-normal text-[#6c7f52]">{t('intro.title2')}</em>
             </h1>
-            <p className="m-0 max-w-[260px] text-xs leading-normal text-muted sm:max-w-none">
-              Follow the scent. Find the treasure. Trust no fluffy face.
-            </p>
+            <p className="m-0 max-w-[280px] text-xs leading-normal text-muted sm:max-w-none">{t('intro.sub')}</p>
           </div>
           <button
             type="button"
             onClick={startNew}
-            aria-label="New adventure"
+            aria-label={t('intro.new')}
             className="mt-6 shrink-0 rounded-[10px] bg-forest p-3 text-xs font-medium text-white shadow-[0_5px_12px_#263d3110] sm:mt-0 lg:px-5 lg:py-3.5"
           >
-            ✧<span className="hidden sm:inline">&nbsp; New adventure</span>
+            ✧<span className="hidden sm:inline">&nbsp; {t('intro.new')}</span>
             <span className="ml-6 hidden text-[#becb9f] lg:inline">↗</span>
           </button>
         </section>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_248px] lg:grid-cols-[minmax(0,1fr)_288px] lg:gap-[22px]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_268px] lg:grid-cols-[minmax(0,1fr)_310px] lg:gap-[22px]">
           <section className="overflow-hidden rounded-[18px] border border-line bg-paper">
             <Scene reactions={reactions} />
             <Hand />
           </section>
-          <aside className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:flex md:flex-col md:gap-4">
+          <aside className="grid grid-cols-1 gap-3 min-[560px]:grid-cols-2 md:flex md:flex-col md:gap-4">
             <PartyPanel />
             <ActivityPanel onReact={react} />
-            <div className="hidden gap-2.5 px-1 py-5 md:flex">
+            <div className="hidden gap-2.5 px-1 py-3 md:flex">
               <span className="text-lg text-[#b3bd8c]" aria-hidden="true">
                 ✦
               </span>
               <p className="m-0 text-[11px] leading-[1.9] text-muted">
-                A wagging tail doesn’t always mean a good dog.
+                {t('tip.1')}
                 <br />
-                <b className="font-normal text-[#6c7b58]">Someone might be leading you astray.</b>
+                <b className="font-normal text-[#6c7b58]">{t('tip.2')}</b>
               </p>
             </div>
           </aside>
         </div>
 
         <footer className="flex justify-between py-6 text-[9px] tracking-wide text-subtle">
-          <span>MADE FOR GOOD DOGS. AND A FEW SNEAKY ONES.</span>
-          <span className="hidden tracking-normal sm:inline">Private roles · Random treasures · Endless tail wags</span>
+          <span>{t('footer.1')}</span>
+          <span className="hidden tracking-normal sm:inline">{t('footer.2')}</span>
         </footer>
       </main>
 
-      {toast && <Toast key={toast.id} text={toast.text} />}
+      {toast && <Toast key={toast.id} text={t(toast.key, toast.params)} />}
       {modal && <Modals />}
       {confetti.map((c) => (
         <span

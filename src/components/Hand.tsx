@@ -1,27 +1,30 @@
 import clsx from 'clsx'
-import { CARD_INFO } from '@/game/constants'
-import { rotate } from '@/game/rules'
+import { flip } from '@/game/board'
+import { useT } from '@/i18n'
+import { cardIcon, cardNameKey } from '@/lib/cards'
 import { useHints } from '@/lib/hints'
 import { isHumanTurn, useGameStore } from '@/store/gameStore'
 import { Dog } from './art/Dog'
 import { Trail } from './art/Trail'
 
 export function Hand() {
+  const t = useT()
   const store = useGameStore()
-  const { game, selected, rotation, selectCard, rotateCard, discard } = store
+  const { game, selected, flipped, selectCard, flipCard, pass, openModal } = store
   const player = game.players[game.turn]
   const human = isHumanTurn(store)
-  const visible = human || game.ended
+  const over = game.phase !== 'playing'
+  const visible = human
   const { cardHelp } = useHints()
 
-  const status = game.ended ? 'HUNT COMPLETE' : human ? 'YOUR TURN' : `${player.name.toUpperCase()}’S TURN`
-  const title = game.ended
-    ? 'A little adventure to remember.'
-    : player.blocked
-      ? 'Squirrel trouble. Find a treat!'
+  const status = over ? t('hand.over') : human ? t('hand.yourTurn') : t('hand.theirTurn', { name: player.name.toUpperCase() })
+  const title = over
+    ? t('hand.title.over')
+    : player.broken.length && human
+      ? t('hand.title.blocked')
       : human
-        ? 'Make a little magic.'
-        : 'A little plotting in progress…'
+        ? t('hand.title.play')
+        : t('hand.title.waiting')
 
   return (
     <div className="px-3 pt-4 sm:px-6 sm:pt-5">
@@ -34,11 +37,11 @@ export function Hand() {
           <span className="mr-1 text-2xl text-[#afb99d]" aria-hidden="true">
             ▧
           </span>
-          <b className="text-[#5f6e4e]">{game.deck.length}</b> cards left
+          <b className="text-[#5f6e4e]">{game.deck.length}</b> {t('hand.deck')}
         </div>
       </div>
 
-      <div className="flex min-h-[130px] justify-center gap-2 pt-4 pb-4 sm:gap-3">
+      <div className="flex min-h-[130px] justify-center gap-1.5 pt-4 pb-4 sm:gap-2.5">
         {visible ? (
           player.hand.map((card, i) => {
             const active = selected === i
@@ -46,27 +49,27 @@ export function Hand() {
               <button
                 key={i}
                 type="button"
-                disabled={game.ended}
                 aria-pressed={active}
                 onClick={() => selectCard(i)}
                 className={clsx(
-                  'relative flex h-[104px] w-[calc((100vw-94px)/5)] max-w-[77px] shrink-0 flex-col items-center rounded-lg border border-[#dddcc6] bg-[#fffef4] p-1.5 transition-[transform,box-shadow] sm:h-[112px] sm:w-[84px] sm:max-w-none lg:h-[119px] lg:w-[89px] lg:rounded-[10px]',
+                  'relative flex h-[104px] w-[calc((100vw-80px)/6)] max-w-[77px] shrink-0 flex-col items-center rounded-lg border p-1 transition-[transform,box-shadow] sm:h-[112px] sm:w-[78px] sm:max-w-none sm:p-1.5 lg:h-[119px] lg:w-[84px] lg:rounded-[10px]',
+                  card.type === 'break' ? 'border-[#e3cbbf] bg-[#fff7f1]' : 'border-[#dddcc6] bg-[#fffef4]',
                   active
-                    ? '-translate-y-2 bg-[#fbffed] shadow-[0_0_0_2px_#79915c,0_6px_0_#ced6bb]'
+                    ? '-translate-y-2 shadow-[0_0_0_2px_#79915c,0_6px_0_#ced6bb]'
                     : 'shadow-[0_4px_0_#e4e5d7] hover:-translate-y-1.5',
                 )}
               >
                 <small className="self-start text-[8px] tracking-wide text-[#7d876a]">
-                  {card.type === 'trail' ? 'TRAIL' : 'ACTION'}
+                  {card.type === 'path' ? t('tag.trail') : t('tag.action')}
                 </small>
                 <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                  {card.type === 'trail' ? (
-                    <Trail mask={rotate(card.mask, active ? rotation : 0)} mini />
+                  {card.type === 'path' ? (
+                    <Trail mask={active && flipped ? flip(card.mask) : card.mask} dead={card.dead} mini />
                   ) : (
-                    <span className="text-[27px] sm:text-[31px]">{CARD_INFO[card.type].icon}</span>
+                    <span className="text-[24px] sm:text-[28px]">{cardIcon(card)}</span>
                   )}
                 </div>
-                <b className="mt-1 mb-px text-[9px] font-medium">{CARD_INFO[card.type].name}</b>
+                <b className="mt-1 mb-px text-center text-[9px] leading-tight font-medium">{t(cardNameKey(card))}</b>
                 {active && (
                   <span className="absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-moss text-[10px] text-white">
                     ✓
@@ -78,29 +81,40 @@ export function Hand() {
         ) : (
           <div className="flex items-center gap-3 text-xs text-subtle">
             <Dog color={player.color} className="w-[60px]" />
-            Secret paws at work. Your hand will return soon.
+            {over ? (
+              <button
+                type="button"
+                onClick={() => openModal({ kind: 'result' })}
+                className="rounded-[10px] bg-forest px-4 py-3 text-sm font-medium text-white"
+              >
+                {game.phase === 'matchOver' ? t('match.eyebrow') : t('result.next')}
+              </button>
+            ) : (
+              t('hand.hidden')
+            )}
           </div>
         )}
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-[#e9ecdf] py-3 text-[11px] text-muted">
-        <span className="max-w-[55%] leading-normal">{visible ? cardHelp : 'The pack is following the scent…'}</span>
+        <span className="max-w-[60%] leading-normal">{cardHelp}</span>
         <div className="flex shrink-0 gap-2">
           <button
             type="button"
-            onClick={rotateCard}
-            disabled={!human || player.hand[selected]?.type !== 'trail'}
+            onClick={flipCard}
+            disabled={!human || player.hand[selected]?.type !== 'path'}
             className="p-1 text-xs text-[#5f6e4e] disabled:opacity-40"
           >
-            ↻ Rotate
+            {t('hand.flip')}
           </button>
           <button
             type="button"
-            onClick={discard}
+            title={t('caption.pass')}
+            onClick={pass}
             disabled={!human || !player.hand.length}
             className="p-1 text-xs text-[#5f6e4e] disabled:opacity-40"
           >
-            Discard →
+            {t('hand.pass')}
           </button>
         </div>
       </div>

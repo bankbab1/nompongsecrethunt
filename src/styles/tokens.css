@@ -19,8 +19,8 @@
   --color-meadow: #dce8b8;
   --color-sun: #f6e6a7;
 
-  --font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Manrope', 'DM Sans', system-ui, sans-serif;
+  --font-sans: 'DM Sans', 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Manrope', 'Mitr', 'Noto Sans Thai', system-ui, sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 
   --animate-pop: pop 0.3s ease-out;

@@ -1,8 +1,10 @@
-import { chooseBotMove } from './bot'
-import { applyMove, createGame, IllegalMove, isLegal, key, reachable, rotate } from './rules'
-import type { Card, GameState, Rng } from './types'
+import { flip, goalsReached, isLegal, key, network } from './board'
+import { barkFor, chooseAccusation, chooseBotMove, treasureBeliefs } from './bot'
+import { buildDeck, ROLE_DECK } from './constants'
+import { accuse, applyMove, createMatch, IllegalMove, score, standings, startRound } from './rules'
+import { packSuspicion } from './suspicion'
+import type { Card, GameState, Rng, Tile } from './types'
 
-/** Deterministic RNG for repeatable games. */
 function seededRng(seed = 1): Rng {
   return (n) => {
     seed = (seed * 16807) % 2147483647
@@ -10,147 +12,231 @@ function seededRng(seed = 1): Rng {
   }
 }
 
-function game(overrides: Partial<GameState> = {}, hand: Card[] = []): GameState {
-  const g = createGame({ name: 'Tester', mode: 'solo', count: 4, now: 0 }, seededRng())
+const names = (n: number) => ['Tester', 'B', 'C', 'D', 'E', 'F', 'G'].slice(0, n)
+
+/** A 4-dog solo match where it's player 0's turn and they hold exactly `hand`. */
+function match(hand: Card[] = [], overrides: Partial<GameState> = {}): GameState {
+  const g = createMatch({ mode: 'solo', names: names(4), now: 0 }, seededRng())
+  g.turn = 0
   if (hand.length) g.players[0].hand = hand
   return { ...g, ...overrides }
 }
 
-describe('rotate', () => {
-  it('turns edges clockwise and wraps after four turns', () => {
-    expect(rotate(1)).toBe(2) // up → right
-    expect(rotate(8)).toBe(1) // left → up
-    expect(rotate(10)).toBe(5) // horizontal → vertical
-    expect(rotate(3, 4)).toBe(3)
-  })
-})
+const path = (mask: number, dead = false): Card => ({ type: 'path', mask, dead })
+const straightTo = (x: number): Record<string, Tile> => {
+  const board: Record<string, Tile> = { '0,2': { mask: 15, dead: false } }
+  for (let i = 1; i <= x; i++) board[key(i, 2)] = { mask: 10, dead: false }
+  return board
+}
 
-describe('createGame', () => {
-  it('deals five cards to each dog and hides exactly one mischief dog', () => {
-    const g = game()
-    expect(g.players).toHaveLength(4)
-    expect(g.players.every((p) => p.hand.length === 5)).toBe(true)
-    expect(g.deck).toHaveLength(68 - 20)
-    expect(g.players.filter((p) => p.role === 'mischief')).toHaveLength(1)
-    expect(g.board).toEqual({ '0,2': 15, '1,2': 10 })
+describe('deck and roles', () => {
+  it('has the classic 40 trails and 27 actions', () => {
+    const deck = buildDeck()
+    expect(deck).toHaveLength(67)
+    expect(deck.filter((c) => c.type === 'path')).toHaveLength(40)
+    expect(deck.filter((c) => c.type === 'path' && c.dead)).toHaveLength(9)
   })
 
-  it('never repeats the previous mission', () => {
-    const rng = seededRng(7)
-    let prev = createGame({ name: 'A', mode: 'solo', count: 3 }, rng)
-    for (let i = 0; i < 30; i++) {
-      const next = createGame({ name: 'A', mode: 'solo', count: 3, previous: prev }, rng)
-      expect(next.mission).not.toBe(prev.mission)
-      expect(next.hunt).toBe(prev.hunt + 1)
-      prev = next
+  it('deals one role card fewer than the role deck holds', () => {
+    for (let n = 3; n <= 7; n++) {
+      const g = createMatch({ mode: 'solo', names: names(n) }, seededRng(n))
+      const sneaky = g.players.filter((p) => p.role === 'sneaky').length
+      expect(sneaky).toBeGreaterThanOrEqual(ROLE_DECK[n].sneaky - 1)
+      expect(sneaky).toBeLessThanOrEqual(ROLE_DECK[n].sneaky)
+      expect(g.players.every((p) => p.hand.length === (n <= 5 ? 6 : 5))).toBe(true)
     }
   })
+
+  it('gives computer dogs distinct personas and humans none', () => {
+    const solo = createMatch({ mode: 'solo', names: names(6) }, seededRng())
+    expect(solo.players[0].persona).toBeNull()
+    expect(new Set(solo.players.slice(1).map((p) => p.persona)).size).toBe(5)
+    const local = createMatch({ mode: 'local', names: names(4) }, seededRng())
+    expect(local.players.every((p) => p.persona === null)).toBe(true)
+  })
 })
 
-describe('isLegal', () => {
-  const board = { '0,2': 15, '1,2': 10 }
+describe('board', () => {
+  it('only flips cards, never quarter-turns them', () => {
+    expect(flip(10)).toBe(10)
+    expect(flip(6)).toBe(9)
+    expect(flip(14)).toBe(11)
+  })
 
-  it('accepts a tile that extends the network with matching edges', () => {
+  it('stops the scent at dead ends', () => {
+    const board = { ...straightTo(1), '2,2': { mask: 10, dead: true } }
+    const { reached, open } = network(board)
+    expect(reached.has('2,2')).toBe(true)
+    expect(open.has('2,2')).toBe(false)
+    expect(isLegal(board, 3, 2, 10)).toBe(false)
+  })
+
+  it('requires matching edges and a link to the open network', () => {
+    const board = straightTo(1)
     expect(isLegal(board, 2, 2, 10)).toBe(true)
+    expect(isLegal(board, 2, 2, 5)).toBe(false)
+    expect(isLegal(board, 5, 4, 10)).toBe(false)
   })
 
-  it('rejects tiles that leave a neighbouring edge unmatched', () => {
-    expect(isLegal(board, 2, 2, 5)).toBe(false) // vertical tile next to an open east edge
-  })
-
-  it('rejects tiles that do not connect back to Nompong', () => {
-    expect(isLegal(board, 4, 4, 10)).toBe(false)
-  })
-
-  it('rejects occupied cells and the hiding-spot column', () => {
-    expect(isLegal(board, 1, 2, 10)).toBe(false)
-    expect(isLegal({ ...board, '6,2': 10 }, 7, 2, 10)).toBe(false)
+  it('reaches a hiding spot from the side or from below', () => {
+    expect(goalsReached(straightTo(7))).toEqual([1])
+    // Turn up at column 7, step right into column 8, then point up into spot 1 (row 0).
+    const detour = {
+      ...straightTo(6),
+      '7,2': { mask: 8 | 1, dead: false },
+      '7,1': { mask: 4 | 2, dead: false },
+      '8,1': { mask: 8 | 1, dead: false },
+    }
+    expect(goalsReached(detour)).toEqual([0])
   })
 })
 
-describe('applyMove', () => {
-  it('places a trail, draws a card, and passes the turn without mutating the input', () => {
-    const g = game({}, [{ type: 'trail', mask: 10 }, { type: 'sniff' }])
-    const next = applyMove(g, { kind: 'trail', card: 0, x: 2, y: 2, mask: 10 }, 1)
-    expect(next.board['2,2']).toBe(10)
-    expect(next.players[0].hand).toHaveLength(2)
-    expect(next.turn).toBe(1)
-    expect(g.board['2,2']).toBeUndefined()
+describe('moves', () => {
+  it('blocks a pup with a spoiled tool from laying trails until it is fixed', () => {
+    const g = match([path(10), { type: 'fix', tools: ['nose'] }])
+    g.players[0].broken = ['nose']
+    expect(() => applyMove(g, { kind: 'path', card: 0, x: 1, y: 2, flipped: false }, seededRng())).toThrow('error.broken')
+    const fixed = applyMove(g, { kind: 'fix', card: 1, target: 0 }, seededRng())
+    expect(fixed.players[0].broken).toEqual([])
   })
 
-  it('accepts any rotation of the card but not a different shape', () => {
-    const g = game({}, [{ type: 'trail', mask: 5 }])
-    expect(() => applyMove(g, { kind: 'trail', card: 0, x: 2, y: 2, mask: 10 })).not.toThrow()
-    expect(() => applyMove(g, { kind: 'trail', card: 0, x: 2, y: 2, mask: 15 })).toThrow(IllegalMove)
+  it('only breaks a tool that is not already broken, and never your own', () => {
+    const g = match([{ type: 'break', tool: 'leash' }])
+    expect(() => applyMove(g, { kind: 'break', card: 0, target: 0 }, seededRng())).toThrow(IllegalMove)
+    g.players[1].broken = ['leash']
+    expect(() => applyMove(g, { kind: 'break', card: 0, target: 1 }, seededRng())).toThrow('error.alreadyBroken')
+    expect(applyMove(g, { kind: 'break', card: 0, target: 2 }, seededRng()).players[2].broken).toEqual(['leash'])
   })
 
-  it('blocks distracted dogs from placing trails until they get a treat', () => {
-    const g = game({}, [{ type: 'trail', mask: 10 }, { type: 'treat' }])
-    g.players[0].blocked = true
-    expect(() => applyMove(g, { kind: 'trail', card: 0, x: 2, y: 2, mask: 10 })).toThrow(/Squirrel/)
-    const next = applyMove(g, { kind: 'treat', card: 1, target: 0 })
-    expect(next.players[0].blocked).toBe(false)
+  it('lets a double fix mend either of its tools', () => {
+    const g = match([{ type: 'fix', tools: ['leash', 'paw'] }])
+    g.players[1].broken = ['paw']
+    expect(applyMove(g, { kind: 'fix', card: 0, target: 1 }, seededRng()).players[1].broken).toEqual([])
   })
 
-  it('squirrels only distract other, focused dogs', () => {
-    const g = game({}, [{ type: 'squirrel' }])
-    expect(() => applyMove(g, { kind: 'squirrel', card: 0, target: 0 })).toThrow(/another dog/)
-    const next = applyMove(g, { kind: 'squirrel', card: 0, target: 2 })
-    expect(next.players[2].blocked).toBe(true)
+  it('records a private sniff and a public claim', () => {
+    const g = match([{ type: 'sniff' }], { treasure: 2 })
+    const next = applyMove(g, { kind: 'sniff', card: 0, goal: 0, claim: 'treasure' }, seededRng())
+    expect(next.knowledge[0]).toEqual(['rock', null, null])
+    expect(next.claims).toEqual([{ by: 0, goal: 0, says: 'treasure' }])
   })
 
-  it('digs up trails but protects the start', () => {
-    const g = game({}, [{ type: 'dig' }])
-    expect(() => applyMove(g, { kind: 'dig', card: 0, x: 0, y: 2 })).toThrow(/protected/)
-    expect(applyMove(g, { kind: 'dig', card: 0, x: 1, y: 2 }).board['1,2']).toBeUndefined()
+  it('ends the round for the hunters when the trail reaches the treasure', () => {
+    const g = match([path(10)], { board: straightTo(6), treasure: 1 })
+    g.players.forEach((p, i) => (p.role = i === 3 ? 'sneaky' : 'hunter'))
+    const next = applyMove(g, { kind: 'path', card: 0, x: 7, y: 2, flipped: false }, seededRng())
+    expect(next.phase).toBe('roundOver')
+    expect(next.result?.winner).toBe('hunters')
+    expect(next.result?.finder).toBe(0)
+    // Four loot cards, none to the sneaky pup, the best one to the finder.
+    expect(next.players[3].loot).toEqual([])
+    expect(next.players.reduce((n, p) => n + p.loot.length, 0)).toBe(4)
+    expect(Math.max(...next.players.map((p) => p.loot[0]?.value ?? 0))).toBe(next.players[0].loot[0].value)
   })
 
-  it('reveals a rock at a wrong hiding spot and keeps playing', () => {
-    const board: Record<string, number> = { '0,2': 15 }
-    for (let x = 1; x < 6; x++) board[key(x, 2)] = 10
-    const g = game({ board, treasure: 0 }, [{ type: 'trail', mask: 10 }])
-    const next = applyMove(g, { kind: 'trail', card: 0, x: 6, y: 2, mask: 10 })
+  it('reveals a rock and keeps playing when the trail hits the wrong spot', () => {
+    const g = match([path(10)], { board: straightTo(6), treasure: 0 })
+    const next = applyMove(g, { kind: 'path', card: 0, x: 7, y: 2, flipped: false }, seededRng())
     expect(next.revealed).toEqual([1])
-    expect(next.ended).toBe(false)
+    expect(next.phase).toBe('playing')
   })
 
-  it('ends the hunt when the trail reaches the treasure', () => {
-    const board: Record<string, number> = { '0,2': 15 }
-    for (let x = 1; x < 6; x++) board[key(x, 2)] = 10
-    const g = game({ board, treasure: 1 }, [{ type: 'trail', mask: 10 }])
-    const next = applyMove(g, { kind: 'trail', card: 0, x: 6, y: 2, mask: 10 })
-    expect(next.ended).toBe(true)
-    expect(next.winner).toBe('hunters')
-    expect(next.revealed).toEqual([0, 1, 2])
+  it('pays the sneaky pups when every hand runs dry', () => {
+    const g = match([], { deck: [] })
+    g.players.forEach((p, i) => {
+      p.role = i === 2 ? 'sneaky' : 'hunter'
+      p.hand = i === 0 ? [{ type: 'dig' }] : []
+    })
+    const next = applyMove(g, { kind: 'pass', card: 0 }, seededRng())
+    expect(next.result?.winner).toBe('sneaky')
+    expect(score(next.players[2])).toBe(4)
+    expect(score(next.players[0])).toBe(0)
   })
 
-  it('gives mischief the win once every hand is empty', () => {
-    const g = game({ deck: [] })
-    g.players.forEach((p, i) => (p.hand = i === 0 ? [{ type: 'sniff' }] : []))
-    const next = applyMove(g, { kind: 'discard', card: 0 })
-    expect(next.ended).toBe(true)
-    expect(next.winner).toBe('mischief')
-  })
-
-  it('skips dogs with empty hands when passing the turn', () => {
-    const g = game({ deck: [] })
-    g.players[1].hand = []
-    expect(applyMove(g, { kind: 'discard', card: 0 }).turn).toBe(2)
+  it('carries loot across rounds and ends the match after round three', () => {
+    let g = match()
+    g.players[1].loot = [{ value: 3, item: 0 }]
+    g = startRound(startRound(g, seededRng()), seededRng())
+    expect(g.round).toBe(3)
+    expect(score(g.players[1])).toBe(3)
+    expect(standings(g)[0].i).toBe(1)
   })
 })
 
-describe('full games', () => {
-  it('always finish within the deck when every dog is a bot', () => {
-    for (let seed = 1; seed <= 25; seed++) {
+describe('suspicion', () => {
+  it('rises for dead ends and falls for real progress', () => {
+    const g = match([path(10, true), path(10)])
+    const dead = applyMove(g, { kind: 'path', card: 0, x: 1, y: 2, flipped: false }, seededRng())
+    expect(packSuspicion(dead, 0)).toBeGreaterThan(packSuspicion(g, 0))
+    const good = applyMove(g, { kind: 'path', card: 1, x: 1, y: 2, flipped: false }, seededRng())
+    expect(packSuspicion(good, 0)).toBeLessThan(packSuspicion(g, 0))
+  })
+
+  it('catches a lie when the spot is uncovered', () => {
+    const g = match([path(10)], { board: straightTo(6), treasure: 0, claims: [{ by: 2, goal: 1, says: 'treasure' }] })
+    const next = applyMove(g, { kind: 'path', card: 0, x: 7, y: 2, flipped: false }, seededRng())
+    expect(packSuspicion(next, 2)).toBeGreaterThan(packSuspicion(g, 2) + 20)
+  })
+
+  it('makes a dog who sniffed the same spot doubt a liar at once', () => {
+    const g = match([{ type: 'sniff' }], { treasure: 2 })
+    g.knowledge[1][0] = 'rock'
+    const next = applyMove(g, { kind: 'sniff', card: 0, goal: 0, claim: 'treasure' }, seededRng())
+    expect(next.suspicion[1][0]).toBeGreaterThanOrEqual(g.suspicion[1][0] + 25)
+  })
+
+  it('lets you point a paw once per turn', () => {
+    const g = match()
+    const next = accuse(g, 2, seededRng())
+    expect(packSuspicion(next, 2)).toBeGreaterThan(packSuspicion(g, 2))
+    expect(() => accuse(next, 3, seededRng())).toThrow('error.alreadyAccused')
+    expect(() => accuse(g, 0, seededRng())).toThrow('error.accuseSelf')
+  })
+})
+
+describe('computer dogs', () => {
+  it('trust their own sniff over anything barked', () => {
+    const g = match([], { treasure: 2, claims: [{ by: 1, goal: 0, says: 'treasure' }] })
+    g.knowledge[0] = [null, null, 'treasure']
+    expect(treasureBeliefs(g, 0)).toEqual([0, 0, 1])
+  })
+
+  it('never lie as honest hunters and often lie as sneaky charmers', () => {
+    const g = match([], { treasure: 0 })
+    g.players[0].persona = 'pepper'
+    g.players[0].role = 'hunter'
+    const rng = seededRng(3)
+    const honest = Array.from({ length: 200 }, () => barkFor(g, 0, rng)).filter((c) => c === 'treasure').length
+    g.players[0].role = 'sneaky'
+    const lies = Array.from({ length: 200 }, () => barkFor(g, 0, rng)).filter((c) => c === 'rock').length
+    expect(honest).toBeGreaterThan(150)
+    expect(lies).toBeGreaterThan(150)
+  })
+
+  it('accuse once their suspicion passes their persona threshold', () => {
+    const g = match()
+    g.players[0].persona = 'coco'
+    g.players[0].role = 'hunter'
+    expect(chooseAccusation(g, () => 0)).toBeNull()
+    g.suspicion[0][3] = 90
+    expect(chooseAccusation(g, () => 0)).toBe(3)
+  })
+
+  it('always finish a full three-round match', () => {
+    for (let seed = 1; seed <= 12; seed++) {
       const rng = seededRng(seed)
-      let g = createGame({ name: 'Bot', mode: 'solo', count: 3 + (seed % 4) }, rng)
+      let g = createMatch({ mode: 'solo', names: names(3 + (seed % 5)) }, rng)
+      g.players[0].persona = 'biscuit' // let the bot drive the human seat too
       let moves = 0
-      while (!g.ended && moves < 500) {
-        g = applyMove(g, chooseBotMove(g, rng))
+      while (g.phase !== 'matchOver' && moves < 2000) {
+        if (g.phase === 'roundOver') g = startRound(g, rng)
+        const target = chooseAccusation(g, rng)
+        if (target !== null) g = accuse(g, target, rng)
+        g = applyMove(g, chooseBotMove(g, rng), rng)
         moves++
       }
-      expect(g.ended).toBe(true)
-      if (g.winner === 'hunters') expect(reachable(g.board).has(key(6, g.treasure * 2))).toBe(true)
+      expect(g.phase).toBe('matchOver')
+      expect(g.round).toBe(3)
     }
   })
 })

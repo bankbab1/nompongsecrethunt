@@ -1,59 +1,167 @@
-import { BOARD_ROWS, DIRS, TRAIL_COLS } from './constants'
-import { isLegal, key, reachable, rotate } from './rules'
-import type { GameState, Move, Rng } from './types'
+import { flip, frontierDistance, goalCell, goalsReached, isLegal, key, network, START_KEY } from './board'
+import { BOARD_COLS, BOARD_ROWS, DIRS, PERSONAS, type Persona } from './constants'
+import { packSuspicion } from './suspicion'
+import type { GameState, GoalContent, Move, Rng } from './types'
 
 type Scored = { move: Move; score: number }
-const isDeadEnd = (m: number) => m === 1 || m === 2 || m === 4 || m === 8
+
+/** Where this dog believes the treasure is: its own sniffs first, then claims weighted by trust. */
+export function treasureBeliefs(s: GameState, me: number): number[] {
+  const known = s.knowledge[me]
+  if (known.includes('treasure')) return known.map((k) => (k === 'treasure' ? 1 : 0))
+  return [0, 1, 2].map((g) => {
+    if (s.revealed.includes(g) || known[g] === 'rock') return 0
+    let belief = 1
+    for (const c of s.claims) {
+      if (c.goal !== g || c.by === me) continue
+      const trust = 1 - s.suspicion[me][c.by] / 100
+      belief += c.says === 'treasure' ? trust : -0.6 * trust
+    }
+    return Math.max(0.05, belief)
+  })
+}
+
+const argmax = (xs: number[]) => xs.reduce((best, x, i) => (x > xs[best] ? i : best), 0)
+const personaOf = (s: GameState, i: number): Persona => PERSONAS[s.players[i].persona ?? 'mochi']
 
 /**
- * Picks a move for the current computer player. Hunters push the trail east toward the
- * unrevealed hiding spots; the mischief dog builds dead ends, digs, and distracts.
+ * Picks a move for the current computer player. Hunters build toward the spot they believe
+ * in and spoil the dogs they suspect. Sneaky pups lay dead ends, dig, and spoil the dogs who
+ * look most trustworthy — unless the pack is onto them, in which case they play nice for a bit.
  */
 export function chooseBotMove(s: GameState, rng: Rng): Move {
-  const me = s.players[s.turn]
-  const mischief = me.role === 'mischief'
-  const seen = reachable(s.board)
-  const remainingRows = [0, 2, 4].filter((_, gi) => !s.revealed.includes(gi))
-  const targetRow = remainingRows.includes(2) ? 2 : remainingRows[0]
+  const me = s.turn
+  const p = s.players[me]
+  const persona = personaOf(s, me)
+  const beliefs = treasureBeliefs(s, me)
+  const target = argmax(beliefs)
+  const goal = goalCell(target)
+  const { open } = network(s.board)
+  // A sneaky pup plays nice until the trail gets close to the treasure (bolder ones strike
+  // earlier), or whenever the pack is already watching it.
+  const threat = frontierDistance(s.board, [target], open)
+  const lieLow = threat > 4 + persona.bold * 2 || packSuspicion(s, me) > 40
+  const sneaky = p.role === 'sneaky' && !(lieLow && rng(100) >= persona.bold * 12)
+  // While lying low it still lays trails, but ones that wander rather than race ahead.
+  const covering = p.role === 'sneaky' && !sneaky
+  const others = s.players.map((_, i) => i).filter((i) => i !== me)
+  const view = (i: number) => s.suspicion[me][i]
   const options: Scored[] = []
 
-  me.hand.forEach((c, card) => {
-    if (c.type === 'trail') {
-      if (me.blocked) return
-      for (let r = 0; r < 4; r++) {
-        const mask = rotate(c.mask, r)
-        for (let y = 0; y < BOARD_ROWS; y++)
-          for (let x = 0; x < TRAIL_COLS; x++) {
-            if (!isLegal(s.board, x, y, mask, seen)) continue
-            const openExits = DIRS.filter(([dx, dy, bit]) => {
-              const nx = x + dx
-              const ny = y + dy
-              return mask & bit && nx >= 0 && nx < TRAIL_COLS && ny >= 0 && ny < BOARD_ROWS && s.board[key(nx, ny)] === undefined
-            }).length
-            const score = mischief
-              ? (4 - x) * 2 + rng(5) + (isDeadEnd(mask) ? 8 : 0)
-              : x * 4 - Math.abs(targetRow - y) * 2 + openExits * 2 + rng(7) / 4
-            options.push({ move: { kind: 'trail', card, x, y, mask }, score })
-          }
+  p.hand.forEach((c, card) => {
+    switch (c.type) {
+      case 'path': {
+        if (p.broken.length) return
+        for (const flipped of [false, true]) {
+          const mask = flipped ? flip(c.mask) : c.mask
+          for (let y = 0; y < BOARD_ROWS; y++)
+            for (let x = 0; x < BOARD_COLS; x++) {
+              if (!isLegal(s.board, x, y, mask, open)) continue
+              // Closest open edge of the new tile to the target spot.
+              let dist = Math.abs(goal.x - x) + Math.abs(goal.y - y) + 2
+              for (const [dx, dy, bit] of DIRS)
+                if (mask & bit) dist = Math.min(dist, Math.abs(goal.x - x - dx) + Math.abs(goal.y - y - dy))
+              const trial = { ...s.board, [key(x, y)]: { mask, dead: c.dead } }
+              const finishes = !c.dead && goalsReached(trial).includes(target)
+              const score = sneaky
+                ? c.dead
+                  ? 16 + x * 1.5 + rng(4)
+                  : dist * 1.5 - 6 + rng(3)
+                : c.dead
+                  ? -30
+                  : covering
+                    ? 30 - Math.abs(dist - threat - 1) * 3 - (finishes ? 50 : 0) + rng(4)
+                    : 40 - dist * 3 + (finishes ? 40 : 0) + rng(4) / 2
+              options.push({ move: { kind: 'path', card, x, y, flipped }, score })
+            }
+        }
+        return
       }
-    } else if (c.type === 'treat' && me.blocked) {
-      options.push({ move: { kind: 'treat', card, target: s.turn }, score: 30 })
-    } else if (c.type === 'squirrel') {
-      const targets = s.players.flatMap((q, i) => (i !== s.turn && !q.blocked ? [i] : []))
-      if (targets.length)
-        options.push({ move: { kind: 'squirrel', card, target: targets[rng(targets.length)] }, score: mischief ? 13 : 1 })
-    } else if (c.type === 'dig' && mischief) {
-      // Dig up whichever trail reaches furthest east.
-      const furthest = Object.keys(s.board)
-        .map((k) => k.split(',').map(Number))
-        .filter(([x]) => x > 0)
-        .sort((a, b) => b[0] - a[0])[0]
-      if (furthest) options.push({ move: { kind: 'dig', card, x: furthest[0], y: furthest[1] }, score: 12 })
-    } else if (c.type === 'sniff') {
-      options.push({ move: { kind: 'sniff', card }, score: 2 })
+      case 'fix': {
+        for (const i of [me, ...others]) {
+          if (!c.tools.some((t) => s.players[i].broken.includes(t))) continue
+          const score = i === me ? (sneaky ? 20 : 38) : sneaky ? 3 + (view(i) > 55 ? 6 : 0) : 16 - view(i) / 5
+          options.push({ move: { kind: 'fix', card, target: i }, score })
+        }
+        return
+      }
+      case 'break': {
+        for (const i of others) {
+          if (s.players[i].broken.includes(c.tool)) continue
+          // Sneaky pups go after whoever looks most trusted; hunters go after their prime suspect.
+          const score = sneaky ? 12 + persona.bold * 8 + (50 - packSuspicion(s, i)) / 10 : (view(i) - 50) / 2.5 + persona.bold * 6
+          options.push({ move: { kind: 'break', card, target: i }, score })
+        }
+        return
+      }
+      case 'dig': {
+        for (const [k, tile] of Object.entries(s.board)) {
+          if (k === START_KEY) continue
+          const [x, y] = k.split(',').map(Number)
+          const score = sneaky
+            ? open.has(k) && !tile.dead
+              ? 8 + x * 1.2
+              : -5
+            : tile.dead && network(s.board).reached.has(k)
+              ? 14
+              : -10
+          options.push({ move: { kind: 'dig', card, x, y }, score })
+        }
+        return
+      }
+      case 'sniff': {
+        const unknown = [0, 1, 2].filter((g) => !s.revealed.includes(g) && !s.knowledge[me][g])
+        if (!unknown.length || s.knowledge[me].includes('treasure')) return
+        const g = unknown.reduce((a, b) => (beliefs[b] > beliefs[a] ? b : a))
+        options.push({
+          move: { kind: 'sniff', card, goal: g, claim: null },
+          score: (sneaky ? 7 : 11) - (3 - unknown.length) * 3 + rng(3),
+        })
+      }
     }
   })
 
   options.sort((a, b) => b.score - a.score)
-  return options[0]?.move ?? { kind: 'discard', card: rng(me.hand.length) }
+  const best = options[0]
+  if (!best || best.score < 0) return { kind: 'pass', card: worstCard(s, rng) }
+  if (best.move.kind === 'sniff') best.move.claim = barkFor(s, best.move.goal, rng)
+  return best.move
+}
+
+/** The card a dog is happiest to throw away. */
+function worstCard(s: GameState, rng: Rng): number {
+  const hand = s.players[s.turn].hand
+  const sneaky = s.players[s.turn].role === 'sneaky'
+  const i = hand.findIndex((c) => (sneaky ? c.type === 'fix' : c.type === 'path' && c.dead))
+  return i >= 0 ? i : rng(hand.length)
+}
+
+/** What a dog barks after sniffing: the truth, a lie, or nothing, depending on role and persona. */
+export function barkFor(s: GameState, goal: number, rng: Rng): GoalContent | null {
+  const me = s.turn
+  const persona = personaOf(s, me)
+  if (rng(100) < persona.silent * 100) return null
+  const truth: GoalContent = goal === s.treasure ? 'treasure' : 'rock'
+  const lie = rng(100) < (s.players[me].role === 'sneaky' ? persona.lieSneaky : persona.lieHunter) * 100
+  return lie ? (truth === 'treasure' ? 'rock' : 'treasure') : truth
+}
+
+/** Whether a computer dog points a paw before playing, and at whom. */
+export function chooseAccusation(s: GameState, rng: Rng): number | null {
+  if (s.accusedThisTurn) return null
+  const me = s.turn
+  const persona = personaOf(s, me)
+  // Each dog calls out a given suspect once a round, unless it is very sure.
+  const already = (t: number) => s.accusations.some((a) => a.by === me && a.target === t)
+  const others = s.players.map((_, i) => i).filter((i) => i !== me)
+  if (s.players[me].role === 'sneaky') {
+    // Pile onto whoever the pack already doubts, or deflect once the pack starts eyeing us.
+    const scapegoat = others.reduce((a, b) => (packSuspicion(s, b) > packSuspicion(s, a) ? b : a))
+    const pressured = packSuspicion(s, me) > 25 || packSuspicion(s, scapegoat) > 45
+    return pressured && !already(scapegoat) && rng(100) < persona.chat * 60 ? scapegoat : null
+  }
+  const suspect = others.reduce((a, b) => (s.suspicion[me][b] > s.suspicion[me][a] ? b : a))
+  const sure = s.suspicion[me][suspect]
+  if (sure < persona.accuseAt || (already(suspect) && sure < 95)) return null
+  return rng(100) < persona.chat * 70 ? suspect : null
 }

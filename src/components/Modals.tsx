@@ -1,12 +1,15 @@
+import clsx from 'clsx'
 import { useState } from 'react'
-import { MISSIONS } from '@/game/constants'
-import type { Mode } from '@/game/types'
+import { LOOT_ITEMS, MAX_PLAYERS, MIN_PLAYERS, MISSIONS, PERSONAS, ROUNDS } from '@/game/constants'
+import { score, standings } from '@/game/rules'
+import type { GoalContent, Mode } from '@/game/types'
+import { rich, useT } from '@/i18n'
 import { useGameStore } from '@/store/gameStore'
 import { Dog } from './art/Dog'
 import { Dialog, DialogHeading, primaryButton, secondaryButton } from './Dialog'
 
-const body = 'mb-5 text-sm leading-[1.8] text-muted'
-const list = 'pl-5 text-left text-sm leading-[1.8] text-muted list-disc'
+const body = 'mb-5 text-sm leading-[1.8] text-muted whitespace-pre-line'
+const list = 'pl-5 text-left text-sm leading-[1.8] text-muted list-disc space-y-1.5'
 
 export function Modals() {
   const modal = useGameStore((s) => s.modal)
@@ -22,68 +25,91 @@ export function Modals() {
       return <PeekModal goal={modal.goal} />
     case 'handoff':
       return <HandoffModal />
-    case 'results':
-      return <ResultsModal />
+    case 'result':
+      return <ResultModal />
   }
 }
 
 function SetupModal() {
+  const t = useT()
   const game = useGameStore((s) => s.game)
-  const newGame = useGameStore((s) => s.newGame)
+  const newMatch = useGameStore((s) => s.newMatch)
   const closeModal = useGameStore((s) => s.closeModal)
-  const [name, setName] = useState(game.players[0].name)
   const [mode, setMode] = useState<Mode>(game.mode)
   const [count, setCount] = useState(game.players.length)
+  const [names, setNames] = useState<string[]>(() =>
+    Array.from({ length: MAX_PLAYERS }, (_, i) => (game.players[i] && !game.players[i].persona ? game.players[i].name : '')),
+  )
   const field = 'w-full rounded-lg border border-[#dce3cf] bg-white p-3 text-[#365139]'
   const label = 'mt-3 mb-1.5 block text-left text-xs'
+  const setName = (i: number, v: string) => setNames((ns) => ns.map((n, j) => (j === i ? v : n)))
 
   return (
-    <Dialog label="New adventure" onDismiss={closeModal}>
+    <Dialog label={t('intro.new')} onDismiss={closeModal}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          newGame({ name: name.trim() || 'You', mode, count })
+          const filled = names
+            .slice(0, mode === 'solo' ? 1 : count)
+            .map((n, i) => n.trim() || (i === 0 && mode === 'solo' ? (t.lang === 'th' ? 'คุณ' : 'You') : t('setup.player', { n: i + 1 })))
+          while (filled.length < count) filled.push('')
+          newMatch({ mode, names: filled })
         }}
       >
-        <DialogHeading icon={<Dog className="mx-auto h-[90px]" />} eyebrow="SOMETHING GOOD IS HIDING" title="Adventure starts here." />
-        <p className={body}>
-          One treasure. A pack of curious dogs.
-          <br />
-          And someone with a sneaky little plan.
-        </p>
-        <label htmlFor="nickname" className={label}>
-          Your nickname
-        </label>
-        <input
-          id="nickname"
-          className={field}
-          maxLength={18}
-          value={name}
-          placeholder="What should we call you?"
-          onChange={(e) => setName(e.target.value)}
-        />
+        <DialogHeading icon={<Dog className="mx-auto h-[90px]" />} eyebrow={t('setup.eyebrow')} title={t('setup.title')} />
+        <p className={body}>{t('setup.body')}</p>
+
         <label htmlFor="game-mode" className={label}>
-          How would you like to play?
+          {t('setup.mode')}
         </label>
         <select id="game-mode" className={field} value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-          <option value="solo">Solo adventure · you + computer dogs</option>
-          <option value="local">Pass & play · friends on one device</option>
+          <option value="solo">{t('setup.solo')}</option>
+          <option value="local">{t('setup.local')}</option>
         </select>
+
         <label htmlFor="pack-size" className={label}>
-          Pack size
+          {t('setup.size')}
         </label>
         <select id="pack-size" className={field} value={count} onChange={(e) => setCount(Number(e.target.value))}>
-          <option value={3}>3 dogs · a quick adventure</option>
-          <option value={4}>4 dogs · a cozy little pack</option>
-          <option value={5}>5 dogs · a little more mischief</option>
-          <option value={6}>6 dogs · the whole pack</option>
+          {Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => MIN_PLAYERS + i).map((n) => (
+            <option key={n} value={n}>
+              {t('setup.dogs', { n })}
+            </option>
+          ))}
         </select>
-        <p className="my-3 text-[11px] text-muted">One dog is secretly mischievous. Online rooms aren’t included yet.</p>
+
+        {mode === 'solo' ? (
+          <>
+            <label htmlFor="name-0" className={label}>
+              {t('setup.name')}
+            </label>
+            <input id="name-0" className={field} maxLength={14} value={names[0]} placeholder={t('setup.namePlaceholder')} onChange={(e) => setName(0, e.target.value)} />
+          </>
+        ) : (
+          <fieldset>
+            <legend className={label}>{t('setup.names')}</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {Array.from({ length: count }, (_, i) => (
+                <input
+                  key={i}
+                  aria-label={t('setup.player', { n: i + 1 })}
+                  className={field}
+                  maxLength={14}
+                  value={names[i]}
+                  placeholder={t('setup.player', { n: i + 1 })}
+                  onChange={(e) => setName(i, e.target.value)}
+                />
+              ))}
+            </div>
+          </fieldset>
+        )}
+
+        <p className="my-3 text-[11px] leading-relaxed text-muted">{t('setup.note')}</p>
         <button type="submit" className={primaryButton}>
-          Let’s follow the scent →
+          {t('setup.start')}
         </button>
         <button type="button" className={secondaryButton} onClick={closeModal}>
-          Back to the garden
+          {t('setup.cancel')}
         </button>
       </form>
     </Dialog>
@@ -91,123 +117,184 @@ function SetupModal() {
 }
 
 function HelpModal() {
+  const t = useT()
   const closeModal = useGameStore((s) => s.closeModal)
   return (
-    <Dialog label="How to play" onDismiss={closeModal}>
-      <DialogHeading icon="🌱" title="A little guide to the hunt." />
+    <Dialog label={t('header.help')} onDismiss={closeModal}>
+      <DialogHeading icon="🌱" title={t('guide.title')} />
       <ul className={list}>
-        <li>
-          <b>Hunters</b> connect Nompong to the treasure. One secret <b>mischief dog</b> wants the pack to run out of cards.
-        </li>
-        <li>Choose a trail card, rotate it (or press R), then tap a glowing spot. Tap again to confirm. All neighboring trail edges must match.</li>
-        <li>
-          <b>Sniff</b> a hiding spot for a private clue. <b>Squirrel!</b> distracts a dog until someone gives them a <b>treat</b>.
-        </li>
-        <li>
-          <b>Dig</b> removes a trail. You can always discard instead of playing.
-        </li>
-        <li>Play one card, then draw one. If nobody reaches the treasure before all hands are empty, mischief wins.</li>
-        <li>There’s no turn timer. The game saves in this browser. Pass & play uses one device; solo includes computer dogs.</li>
+        {t.list('guide.items').map((item, i) => (
+          <li key={i}>{rich(item)}</li>
+        ))}
       </ul>
+      <div className="my-4 grid grid-cols-2 gap-2 text-left text-[11px] text-muted sm:grid-cols-3">
+        {Object.values(PERSONAS).map((p) => (
+          <div key={p.id} className="rounded-lg bg-sage-50 px-2 py-1.5">
+            <span className="mr-1">{p.emoji}</span>
+            <b className="text-ink">{p.name}</b>
+            <div>{t(`persona.${p.id}`)}</div>
+          </div>
+        ))}
+      </div>
       <button type="button" className={primaryButton} onClick={closeModal}>
-        Got it. Let’s sniff! →
+        {t('guide.close')}
       </button>
     </Dialog>
   )
 }
 
 function RoleModal() {
-  const role = useGameStore((s) => s.game.players[s.game.turn].role)
+  const t = useT()
+  const game = useGameStore((s) => s.game)
   const closeModal = useGameStore((s) => s.closeModal)
-  const bad = role === 'mischief'
+  const sneaky = game.players[game.turn].role === 'sneaky'
+  const item = t(`mission.${game.mission}`)
+  const known = game.knowledge[game.turn]
   return (
-    <Dialog label="Your secret role" onDismiss={closeModal}>
+    <Dialog label={t('role.button')} onDismiss={closeModal}>
       <DialogHeading
-        icon={bad ? '🐿️' : '🐾'}
-        eyebrow="SHHH. THIS IS YOUR SECRET."
-        title={bad ? 'A little mischief maker.' : 'A good-hearted hunter.'}
+        icon={sneaky ? '🐿️' : '🐾'}
+        eyebrow={t('role.secret')}
+        title={sneaky ? t('role.sneaky.title') : t('role.hunter.title')}
       />
-      <p className={body}>
-        {bad
-          ? 'Keep the pack away from the treasure. Create detours, dig up useful trails, and distract the other dogs. You win if everyone runs out of cards.'
-          : 'Help Nompong reach the treasure. Build connected trails, sniff out hiding spots, and keep an eye on suspicious dogs.'}
-      </p>
+      <p className={body}>{sneaky ? t('role.sneaky.body', { item }) : t('role.hunter.body', { item })}</p>
+      {known.some(Boolean) && (
+        <div className="mb-4 rounded-xl bg-sage-50 p-3 text-sm">
+          <div className="mb-2 text-[10px] tracking-widest text-subtle">{t('role.knowledge')}</div>
+          <div className="flex justify-center gap-4">
+            {known.map((k, g) => (
+              <span key={g} className={clsx(!k && 'opacity-30')}>
+                {g + 1}: {k === 'treasure' ? MISSIONS[game.mission] : k === 'rock' ? '🪨' : '?'}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <button type="button" className={primaryButton} onClick={closeModal}>
-        Hide my secret →
+        {t('role.hide')}
       </button>
     </Dialog>
   )
 }
 
 function PeekModal({ goal }: { goal: number }) {
+  const t = useT()
   const game = useGameStore((s) => s.game)
-  const confirmPeek = useGameStore((s) => s.confirmPeek)
-  const mission = MISSIONS[game.mission]
+  const bark = useGameStore((s) => s.bark)
   const found = goal === game.treasure
+  const item = t(`mission.${game.mission}`)
+  const spot = goal + 1
+  const options: { claim: GoalContent | null; text: string }[] = [
+    { claim: 'treasure', text: t('bark.treasure', { item, spot }) },
+    { claim: 'rock', text: t('bark.rock', { spot }) },
+    { claim: null, text: `🤐 ${t('bark.silent')}` },
+  ]
   return (
-    <Dialog label="A secret sniff">
-      <DialogHeading icon={found ? mission.icon : '🪨'} eyebrow="A SECRET SNIFF" title={found ? 'You found the scent!' : 'Just a little rock.'} />
-      <p className={body}>
-        Hiding spot {goal + 1} {found ? `holds the ${mission.name}` : 'doesn’t have the treasure'}. Only you can see this clue.
-      </p>
-      <button type="button" className={primaryButton} onClick={confirmPeek}>
-        Keep it secret →
-      </button>
+    <Dialog label={t('peek.eyebrow', { spot })}>
+      <DialogHeading icon={found ? MISSIONS[game.mission] : '🪨'} eyebrow={t('peek.eyebrow', { spot })} title={found ? t('peek.treasure') : t('peek.rock')} />
+      <p className={body}>{found ? t('peek.treasureBody', { spot, item }) : t('peek.rockBody', { spot })}</p>
+      <div className="mb-2 text-left text-xs font-semibold">{t('bark.prompt')}</div>
+      {options.map((o) => (
+        <button
+          key={String(o.claim)}
+          type="button"
+          onClick={() => bark(o.claim)}
+          className={clsx(o.claim === null ? secondaryButton : primaryButton, 'text-left')}
+        >
+          {o.text}
+        </button>
+      ))}
     </Dialog>
   )
 }
 
 function HandoffModal() {
+  const t = useT()
   const name = useGameStore((s) => s.game.players[s.game.turn].name)
   const takeHandoff = useGameStore((s) => s.takeHandoff)
   return (
-    <Dialog label="Pass the device">
-      <DialogHeading icon="🐾" eyebrow="PASS THE DEVICE" title={`${name}’s turn`} />
-      <p className={body}>Hand the device to {name}. Their cards and secret role will appear after they continue.</p>
+    <Dialog label={t('handoff.eyebrow')}>
+      <DialogHeading icon="🐾" eyebrow={t('handoff.eyebrow')} title={t('handoff.title', { name })} />
+      <p className={body}>{t('handoff.body', { name })}</p>
       <button type="button" className={primaryButton} onClick={takeHandoff}>
-        I’m {name} →
+        {t('handoff.ready', { name })}
       </button>
     </Dialog>
   )
 }
 
-function ResultsModal() {
+function ResultModal() {
+  const t = useT()
   const game = useGameStore((s) => s.game)
-  const newGame = useGameStore((s) => s.newGame)
+  const nextRound = useGameStore((s) => s.nextRound)
+  const openModal = useGameStore((s) => s.openModal)
   const closeModal = useGameStore((s) => s.closeModal)
-  const mission = MISSIONS[game.mission]
-  const huntersWon = game.winner === 'hunters'
-  const youWon = game.players[0].role === (huntersWon ? 'hunter' : 'mischief')
+  const result = game.result
+  if (!result) return null
+
+  const item = t(`mission.${game.mission}`)
+  const huntersWon = result.winner === 'hunters'
+  const noSneaky = !huntersWon && !game.players.some((p) => p.role === 'sneaky')
+  const matchOver = game.phase === 'matchOver'
+  const payout = (i: number) => result.payouts.find((x) => x.player === i)?.loot ?? []
+  const you = game.mode === 'solo' ? game.players[0] : null
+  const table = standings(game)
+  const top = table.filter((r) => r.place === 1)
 
   return (
-    <Dialog label="The secret is out" onDismiss={closeModal}>
-      <DialogHeading
-        icon={huntersWon ? mission.icon : '🐿️'}
-        eyebrow="THE SECRET IS OUT"
-        title={huntersWon ? 'Good dogs. Great find.' : 'Mischief accomplished.'}
-      />
+    <Dialog label={t('result.eyebrow', { round: game.round, rounds: ROUNDS })} onDismiss={closeModal}>
+      {matchOver ? (
+        <DialogHeading
+          icon="🏆"
+          eyebrow={t('match.eyebrow')}
+          title={top.length > 1 ? t('match.tie') : top[0].i === 0 && you ? t('match.you') : t('match.winner', { name: top[0].name })}
+        />
+      ) : (
+        <DialogHeading
+          icon={huntersWon ? MISSIONS[game.mission] : '🐿️'}
+          eyebrow={t('result.eyebrow', { round: game.round, rounds: ROUNDS })}
+          title={huntersWon ? t('result.hunters') : t('result.sneaky')}
+        />
+      )}
       <p className={body}>
-        {huntersWon
-          ? `The hunters found Nompong’s ${mission.name}.`
-          : 'The mischievous dog kept the treasure hidden until the cards ran out.'}
-        {game.mode === 'solo' && (youWon ? ' Your team wins!' : ' Your team lost this hunt.')}
+        {huntersWon ? t('result.huntersBody', { name: game.players[result.finder!].name, item }) : noSneaky ? t('result.nobody') : t('result.sneakyBody', { item })}
+        {you && ` ${(you.role === 'hunter') === huntersWon ? t('result.youWon') : t('result.youLost')}`}
       </p>
-      <ul className={list}>
-        {game.players.map((p, i) => (
-          <li key={i}>
-            <b>{p.name}</b> — {p.role === 'mischief' ? '🐿️ Mischief dog' : '🐾 Treasure hunter'}
-          </li>
-        ))}
+
+      <ul className="mb-4 space-y-1.5 text-left text-sm">
+        {(matchOver ? table.map((r) => r.i) : game.players.map((_, i) => i)).map((i) => {
+          const p = game.players[i]
+          const loot = payout(i)
+          return (
+            <li key={i} className="flex items-center gap-2 rounded-lg bg-sage-50 px-3 py-2">
+              {matchOver && <b className="w-5 text-subtle">{table.find((r) => r.i === i)!.place}</b>}
+              <span>{p.role === 'sneaky' ? '🐿️' : '🐾'}</span>
+              <b className="truncate">{p.name}</b>
+              <span className="text-[11px] text-muted">{p.role === 'sneaky' ? t('role.sneaky') : t('role.hunter')}</span>
+              <span className="ml-auto flex items-center gap-1.5">
+                {loot.map((c, j) => (
+                  <span key={j} title={`${c.value}`}>
+                    {LOOT_ITEMS[c.value][c.item]}
+                  </span>
+                ))}
+                <b className="w-14 text-right text-[12px] text-forest">{t('match.pts', { n: score(p) })}</b>
+              </span>
+            </li>
+          )
+        })}
       </ul>
-      <button
-        type="button"
-        className={primaryButton}
-        onClick={() => newGame({ name: game.players[0].name, mode: game.mode, count: game.players.length })}
-      >
-        Next little adventure →
-      </button>
+
+      {matchOver ? (
+        <button type="button" className={primaryButton} onClick={() => openModal({ kind: 'setup' })}>
+          {t('match.again')}
+        </button>
+      ) : (
+        <button type="button" className={primaryButton} onClick={nextRound}>
+          {t('result.next')}
+        </button>
+      )}
       <button type="button" className={secondaryButton} onClick={closeModal}>
-        Explore the garden
+        {matchOver ? t('match.view') : t('result.view')}
       </button>
     </Dialog>
   )

@@ -1,10 +1,14 @@
 import { create } from 'zustand'
-import { chooseBotMove } from '@/game/bot'
-import { applyMove, createGame, cryptoRng, IllegalMove, isGoalCell, isLegal, isSavedGame, rotate } from '@/game/rules'
-import type { GameState, Mode, Move, Theme } from '@/game/types'
+import { flip, goalAt, isLegal } from '@/game/board'
+import { chooseAccusation, chooseBotMove } from '@/game/bot'
+import { accuse, applyMove, createMatch, cryptoRng, IllegalMove, isSavedGame, startRound } from '@/game/rules'
+import type { GameState, GoalContent, Mode, Move, Theme } from '@/game/types'
+import type { Lang, Params } from '@/i18n'
+import type { MessageKey } from '@/i18n/en'
 import { beep } from '@/lib/sound'
 
-export const SAVE_KEY = 'nompong-hunt-v1'
+export const SAVE_KEY = 'nompong-hunt-v2'
+export const LANG_KEY = 'nompong-hunt-lang'
 
 export type Modal =
   | { kind: 'setup' }
@@ -12,73 +16,102 @@ export type Modal =
   | { kind: 'role' }
   | { kind: 'peek'; goal: number }
   | { kind: 'handoff' }
-  | { kind: 'results' }
+  | { kind: 'result' }
 
 interface GameStore {
   game: GameState
+  lang: Lang
   selected: number
-  rotation: number
+  flipped: boolean
   preview: { x: number; y: number } | null
   /** Pass & play: the next dog hasn't taken the device yet, so their hand stays hidden. */
   awaitingHandoff: boolean
   zoom: number
   sound: boolean
   modal: Modal | null
-  toast: { text: string; id: number } | null
+  toast: { key: MessageKey | (string & {}); params?: Params; id: number } | null
 
-  newGame: (opts: { name: string; mode: Mode; count: number }) => void
+  newMatch: (opts: { mode: Mode; names: string[] }) => void
+  nextRound: () => void
   selectCard: (i: number) => void
-  rotateCard: () => void
+  flipCard: () => void
   tapCell: (x: number, y: number) => void
   tapPlayer: (i: number) => void
-  discard: () => void
-  confirmPeek: () => void
+  accusePlayer: (i: number) => void
+  pass: () => void
+  bark: (claim: GoalContent | null) => void
   takeHandoff: () => void
   playBotTurn: () => void
   setTheme: (theme: Theme) => void
   setZoom: (zoom: number) => void
   toggleSound: () => void
+  setLang: (lang: Lang) => void
   openModal: (modal: Modal) => void
   closeModal: () => void
-  showToast: (text: string) => void
+  showToast: (key: MessageKey, params?: Params) => void
 }
 
 export const isHumanTurn = (s: Pick<GameStore, 'game' | 'awaitingHandoff'>) =>
-  !s.game.ended && (s.game.mode === 'local' ? !s.awaitingHandoff : s.game.turn === 0)
+  s.game.phase === 'playing' &&
+  (s.game.mode === 'local' ? !s.awaitingHandoff : s.game.players[s.game.turn].persona === null)
 
-/** The selected card's mask after rotation, or 0 when the selection isn't a trail. */
-export const selectedMask = (s: Pick<GameStore, 'game' | 'selected' | 'rotation'>) => {
+/** The selected trail's mask as it would be placed, or 0 when the selection isn't a trail. */
+export const selectedMask = (s: Pick<GameStore, 'game' | 'selected' | 'flipped'>) => {
   const card = s.game.players[s.game.turn].hand[s.selected]
-  return card?.type === 'trail' ? rotate(card.mask, s.rotation) : 0
+  return card?.type === 'path' ? (s.flipped ? flip(card.mask) : card.mask) : 0
 }
 
-function loadSaved(): GameState | null {
+function read<T>(key: string, parse: (raw: string) => T | null): T | null {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null')
-    return isSavedGame(saved) ? saved : null
+    const raw = localStorage.getItem(key)
+    return raw === null ? null : parse(raw)
   } catch {
     return null
   }
 }
 
-function initialState() {
-  const saved = loadSaved()
-  const game = saved ?? createGame({ name: 'You', mode: 'solo', count: 4 }, cryptoRng)
-  const pendingHandoff = game.mode === 'local' && !game.ended
-  const modal: Modal | null = game.ended ? { kind: 'results' } : pendingHandoff ? { kind: 'handoff' } : null
-  return { game, awaitingHandoff: pendingHandoff, modal, fresh: !saved }
+function write(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Private mode or full storage: the hunt still plays, it just won't survive a reload.
+  }
 }
 
-const boot = initialState()
+function boot() {
+  const saved = read(SAVE_KEY, (raw) => {
+    const v: unknown = JSON.parse(raw)
+    return isSavedGame(v) ? v : null
+  })
+  const lang = read<Lang>(LANG_KEY, (raw) => (raw === 'th' || raw === 'en' ? raw : null)) ?? 'th'
+  const game = saved ?? createMatch({ mode: 'solo', names: [lang === 'th' ? 'คุณ' : 'You', '', '', ''] }, cryptoRng)
+  const handoff = game.mode === 'local' && game.phase === 'playing'
+  const modal: Modal | null = game.phase !== 'playing' ? { kind: 'result' } : handoff ? { kind: 'handoff' } : saved ? null : { kind: 'setup' }
+  return { game, lang, awaitingHandoff: handoff, modal }
+}
+
+const initial = boot()
 
 export const useGameStore = create<GameStore>()((set, get) => {
-  const toast = (text: string) => set({ toast: { text, id: Date.now() } })
+  const toast = (key: string, params?: Params) => set({ toast: { key, params, id: Date.now() } })
 
-  /** Plays a move for whoever's turn it is and moves the UI on to what comes next. */
+  /** After any state change: who acts next, and what does the screen need to show? */
+  const advance = (next: GameState) => {
+    const handoff = next.mode === 'local' && next.phase === 'playing'
+    set({
+      game: next,
+      selected: 0,
+      flipped: false,
+      preview: null,
+      awaitingHandoff: handoff,
+      modal: next.phase !== 'playing' ? { kind: 'result' } : handoff ? { kind: 'handoff' } : null,
+    })
+  }
+
   const play = (move: Move): boolean => {
     let next: GameState
     try {
-      next = applyMove(get().game, move)
+      next = applyMove(get().game, move, cryptoRng)
     } catch (e) {
       if (e instanceof IllegalMove) {
         toast(e.message)
@@ -86,106 +119,122 @@ export const useGameStore = create<GameStore>()((set, get) => {
       }
       throw e
     }
-    const { sound } = get()
-    beep(630, sound)
-    const handoff = next.mode === 'local' && !next.ended
-    set({
-      game: next,
-      selected: 0,
-      rotation: 0,
-      preview: null,
-      awaitingHandoff: handoff,
-      modal: next.ended ? { kind: 'results' } : handoff ? { kind: 'handoff' } : null,
-    })
+    beep(630, get().sound)
+    advance(next)
     return true
   }
 
+  const currentCard = () => {
+    const { game, selected } = get()
+    return game.players[game.turn].hand[selected]
+  }
+
   return {
-    game: boot.game,
+    ...initial,
     selected: 0,
-    rotation: 0,
+    flipped: false,
     preview: null,
-    awaitingHandoff: boot.awaitingHandoff,
     zoom: 1,
     sound: false,
-    modal: boot.modal,
-    toast: boot.fresh ? { text: 'Welcome to the garden! Peek at your secret role.', id: 0 } : null,
+    toast: null,
 
-    newGame: ({ name, mode, count }) => {
-      const game = createGame({ name, mode, count, previous: get().game }, cryptoRng)
-      const handoff = mode === 'local'
-      set({ game, selected: 0, rotation: 0, preview: null, awaitingHandoff: handoff, modal: handoff ? { kind: 'handoff' } : null })
-      if (!handoff) toast('Welcome to the garden! Peek at your secret role.')
+    newMatch: ({ mode, names }) => {
+      advance(createMatch({ mode, names, previous: get().game }, cryptoRng))
+      if (mode === 'solo') toast('toast.welcome')
+    },
+
+    nextRound: () => {
+      const { game } = get()
+      if (game.phase !== 'roundOver') return
+      advance(startRound(game, cryptoRng))
     },
 
     selectCard: (i) => {
       if (!isHumanTurn(get())) return
-      set({ selected: i, rotation: 0, preview: null })
+      set({ selected: i, flipped: false, preview: null })
       beep(440, get().sound)
     },
 
-    rotateCard: () => {
+    flipCard: () => {
       const s = get()
-      if (!isHumanTurn(s) || s.game.players[s.game.turn].hand[s.selected]?.type !== 'trail') return
-      set({ rotation: (s.rotation + 1) % 4, preview: null })
+      if (!isHumanTurn(s) || currentCard()?.type !== 'path') return
+      set({ flipped: !s.flipped, preview: null })
       beep(470, s.sound)
     },
 
     tapCell: (x, y) => {
       const s = get()
       if (!isHumanTurn(s)) return
-      const card = s.game.players[s.game.turn].hand[s.selected]
+      const card = currentCard()
       if (!card) return
       switch (card.type) {
-        case 'trail': {
+        case 'path':
           // First tap previews the tile, a second tap on the same spot places it.
           if (s.preview?.x === x && s.preview.y === y) {
-            play({ kind: 'trail', card: s.selected, x, y, mask: selectedMask(s) })
-          } else if (s.game.players[s.game.turn].blocked) {
-            toast('Squirrel trouble! Use a treat or discard a card.')
+            play({ kind: 'path', card: s.selected, x, y, flipped: s.flipped })
+          } else if (s.game.players[s.game.turn].broken.length) {
+            toast('error.broken')
           } else if (!isLegal(s.game.board, x, y, selectedMask(s))) {
-            toast('Trails must connect to Nompong and match every neighboring edge.')
+            toast('error.illegalPath')
           } else {
             set({ preview: { x, y } })
             beep(520, s.sound)
           }
           return
-        }
-        case 'sniff':
-          if (!isGoalCell(x, y)) return toast('Choose one of the three hiding spots.')
-          set({ modal: { kind: 'peek', goal: y / 2 } })
+        case 'sniff': {
+          const goal = goalAt(x, y)
+          if (goal === null) return toast('toast.pickSpot')
+          set({ modal: { kind: 'peek', goal } })
           return
+        }
         case 'dig':
           play({ kind: 'dig', card: s.selected, x, y })
           return
         default:
-          toast('Tap a dog in the pack to use this card.')
+          toast('toast.tapDog')
       }
     },
 
     tapPlayer: (i) => {
       const s = get()
       if (!isHumanTurn(s)) return
-      const card = s.game.players[s.game.turn].hand[s.selected]
-      if (card?.type === 'squirrel' || card?.type === 'treat') play({ kind: card.type, card: s.selected, target: i })
+      const card = currentCard()
+      if (card?.type === 'break' || card?.type === 'fix') play({ kind: card.type, card: s.selected, target: i })
     },
 
-    discard: () => {
+    accusePlayer: (i) => {
       const s = get()
-      if (!isHumanTurn(s) || !s.game.players[s.game.turn].hand.length) return
-      play({ kind: 'discard', card: s.selected })
+      if (!isHumanTurn(s)) return
+      try {
+        set({ game: accuse(s.game, i, cryptoRng) })
+        beep(330, s.sound)
+      } catch (e) {
+        if (e instanceof IllegalMove) toast(e.message)
+        else throw e
+      }
     },
 
-    confirmPeek: () => {
+    pass: () => {
+      const s = get()
+      if (!isHumanTurn(s) || !currentCard()) return
+      play({ kind: 'pass', card: s.selected })
+    },
+
+    bark: (claim) => {
+      const { modal, selected } = get()
+      if (modal?.kind !== 'peek') return
       set({ modal: null })
-      play({ kind: 'sniff', card: get().selected })
+      play({ kind: 'sniff', card: selected, goal: modal.goal, claim })
     },
 
     takeHandoff: () => set({ awaitingHandoff: false, modal: null }),
 
     playBotTurn: () => {
-      const { game } = get()
-      if (game.ended || game.mode !== 'solo' || game.turn === 0) return
+      let { game } = get()
+      if (game.phase !== 'playing' || game.mode !== 'solo' || !game.players[game.turn].persona) return
+      const target = chooseAccusation(game, cryptoRng)
+      if (target !== null) game = accuse(game, target, cryptoRng)
+      set({ game })
       play(chooseBotMove(game, cryptoRng))
     },
 
@@ -194,8 +243,12 @@ export const useGameStore = create<GameStore>()((set, get) => {
     toggleSound: () => {
       const sound = !get().sound
       set({ sound })
-      toast(sound ? 'Little sounds on' : 'Little sounds off')
+      toast(sound ? 'toast.soundOn' : 'toast.soundOff')
       beep(600, sound)
+    },
+    setLang: (lang) => {
+      set({ lang })
+      write(LANG_KEY, lang)
     },
     openModal: (modal) => set({ modal }),
     closeModal: () => set({ modal: null }),
@@ -204,10 +257,5 @@ export const useGameStore = create<GameStore>()((set, get) => {
 })
 
 useGameStore.subscribe((s, prev) => {
-  if (s.game === prev.game) return
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(s.game))
-  } catch {
-    // Private mode or full storage: the hunt still plays, it just won't survive a reload.
-  }
+  if (s.game !== prev.game) write(SAVE_KEY, JSON.stringify(s.game))
 })

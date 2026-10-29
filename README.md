@@ -31,3 +31,7 @@ npm run build      # static site in dist/ (relative base, host anywhere)
 - 3–6 player pass-and-play on one device with private handoffs
 
 Online multiplayer rooms are not implemented yet. Game state is stored in the browser, so pass-and-play privacy depends on players respecting the handoff screen.
+
+## CI and hosting
+
+`.github/workflows/ci.yml` runs typecheck, tests and build on every pull request and push to `main`. Pushes to `main` also deploy `dist/` to GitHub Pages (Settings → Pages → Source must be **GitHub Actions**).

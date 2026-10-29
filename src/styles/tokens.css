@@ -1,0 +1,51 @@
+/* Garden palette for the Secret Hunt. Components use these names (bg-forest, text-ink,
+   border-line…) rather than raw hex, so a palette change only touches this file.
+   The SVG art in components/art keeps its own illustration colours. */
+@theme {
+  --color-cream: #f7f8f2;
+  --color-paper: #fcfdf8;
+  --color-ink: #263d31;
+  --color-muted: #6f7869; /* 4.6:1 on cream */
+  --color-subtle: #8a9388;
+  --color-line: #e4e8dc;
+  --color-line-strong: #d8dfca;
+  --color-forest: #304c36;
+  --color-moss: #557147;
+  --color-leaf: #6d875a;
+  --color-sage: #8ca06c;
+  --color-sage-50: #f3f5ec;
+  --color-sage-100: #eff3e3;
+  --color-sage-200: #e1e8ce;
+  --color-meadow: #dce8b8;
+  --color-sun: #f6e6a7;
+
+  --font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Manrope', 'DM Sans', system-ui, sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+
+  --animate-pop: pop 0.3s ease-out;
+  --animate-float-up: float-up 1.8s ease-out forwards;
+  --animate-fall: fall 3s linear forwards;
+
+  @keyframes pop {
+    from {
+      transform: translateY(-8px);
+      opacity: 0.2;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  @keyframes float-up {
+    to {
+      transform: translateY(-170px) rotate(15deg);
+      opacity: 0;
+    }
+  }
+  @keyframes fall {
+    to {
+      transform: translateY(110vh) rotate(360deg);
+    }
+  }
+}

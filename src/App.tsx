@@ -25,12 +25,12 @@ export function App() {
     document.documentElement.lang = t.lang
   }, [t.lang])
 
-  // Computer dogs take their turn after a short, slightly random pause.
+  // Computer dogs take their turn after a short, slightly random pause, and wait while a dialog is open.
   useEffect(() => {
-    if (!botPending) return
+    if (!botPending || modal) return
     const timer = setTimeout(playBotTurn, BOT_DELAY_MS + cryptoRng(700))
     return () => clearTimeout(timer)
-  }, [botPending, game, playBotTurn])
+  }, [botPending, modal, game, playBotTurn])
 
   // Celebrate when the hunters find the treasure.
   const celebrated = useRef(game.phase !== 'playing')

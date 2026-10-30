@@ -32,6 +32,7 @@ export const th: Record<MessageKey, string | string[]> = {
   'scene.missionLine': '{item}',
 
   'board.label': 'กระดานล่าสมบัติ',
+  'board.treasureHere': 'สมบัติอยู่นี่!',
   'board.start': 'จุดเริ่มต้น',
   'cell.start': 'จุดเริ่มของน้องนมผง',
   'cell.goal': 'จุดซ่อนที่ {n}',
@@ -234,6 +235,9 @@ export const th: Record<MessageKey, string | string[]> = {
 
   'toast.timeUp': 'หมดเวลา! ทิ้งการ์ดที่เลือกให้อัตโนมัติ',
 
+  'setup.boardShort.small': 'เล็ก 9×5',
+  'setup.boardShort.classic': 'คลาสสิก 11×7',
+  'setup.boardShort.large': 'ใหญ่ 13×9',
   'setup.timer': 'เวลาต่อตา',
   'setup.timer.0': 'ไม่จำกัด',
   'setup.timer.n': '{n} วินาที',

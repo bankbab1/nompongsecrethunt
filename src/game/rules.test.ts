@@ -1,4 +1,4 @@
-import { flip, geometry, goalsReached, isLegal, isSealed, key, network } from './board'
+import { flip, geometry, goalsReached, isLegal, isSealed, key, network, trailTo } from './board'
 import { barkFor, chooseAccusation, chooseBotMove, treasureBeliefs } from './bot'
 import { buildDeck, ROLE_DECK } from './constants'
 import { accuse, applyMove, createMatch, IllegalMove, score, standings, startRound } from './rules'
@@ -263,5 +263,12 @@ describe('computer dogs', () => {
       expect(g.phase).toBe('matchOver')
       expect(g.round).toBe(3)
     }
+  })
+})
+
+describe('winning trail', () => {
+  it('traces the route from Nompong into the hiding spot', () => {
+    expect(trailTo(geo, straightTo(7), 1)).toEqual(['0,2', '1,2', '2,2', '3,2', '4,2', '5,2', '6,2', '7,2'])
+    expect(trailTo(geo, straightTo(7), 0)).toEqual([])
   })
 })

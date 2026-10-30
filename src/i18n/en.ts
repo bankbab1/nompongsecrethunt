@@ -33,6 +33,7 @@ export const en = {
   'scene.missionLine': 'The {item}',
 
   'board.label': 'Treasure hunt board',
+  'board.treasureHere': 'Treasure here!',
   'board.start': 'START HERE',
   'cell.start': 'Nompong’s start',
   'cell.goal': 'Hiding spot {n}',
@@ -235,6 +236,9 @@ export const en = {
 
   'toast.timeUp': 'Time’s up! Your selected card was passed.',
 
+  'setup.boardShort.small': 'Small 9×5',
+  'setup.boardShort.classic': 'Classic 11×7',
+  'setup.boardShort.large': 'Large 13×9',
   'setup.timer': 'Time per turn',
   'setup.timer.0': 'No limit',
   'setup.timer.n': '{n} seconds',

@@ -25,23 +25,23 @@ export function Hand() {
   const StatusIcon = human ? MousePointerClick : over ? Flag : Eye
 
   return (
-    <div className="sticky bottom-0 z-30 border-t border-line bg-paper/95 px-3 pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_#2c3e2a14] backdrop-blur md:static md:border-0 md:bg-transparent md:px-6 md:pt-4 md:pb-1 md:shadow-none">
+    <div className="sticky bottom-0 z-30 border-t border-line bg-surface/95 px-3 pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur md:static md:border-0 md:bg-transparent md:px-6 md:pt-4 md:pb-1 md:shadow-none">
       {human && <StepGuide step={guide.step} />}
 
       <div
         className={clsx(
           'mt-2 flex items-start gap-2 rounded-xl px-3 py-2 text-[12px] leading-snug md:text-[13px]',
-          human ? 'bg-[#fffbe6] text-ink ring-1 ring-[#f0e2a8]' : 'bg-[#f3f5ec] text-muted',
+          human ? 'bg-brand-50 text-ink ring-1 ring-brand-200' : 'bg-slate-100 text-muted',
         )}
       >
-        <StatusIcon size={16} strokeWidth={2} className={clsx('mt-px shrink-0', human ? 'text-[#a07b12]' : 'text-subtle')} />
+        <StatusIcon size={16} strokeWidth={2} className={clsx('mt-px shrink-0', human ? 'text-brand-700' : 'text-subtle')} />
         <div className="min-w-0">
           <b className="font-semibold">{guide.instruction}</b>
           {!human && !over && <div className="mt-0.5 hidden text-[11px] md:block">{t('wait.body')}</div>}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted" title={t('hand.deck')}>
-          <Layers size={14} className="text-[#9aa486]" />
-          <b className="text-[#5f6e4e]">{game.deck.length}</b>
+          <Layers size={14} className="text-slate-400" />
+          <b className="text-slate-700">{game.deck.length}</b>
         </div>
       </div>
 
@@ -57,14 +57,14 @@ export function Hand() {
                 onClick={() => selectCard(i)}
                 className={clsx(
                   'relative flex aspect-[3/4] w-[calc((100%-36px)/6)] max-w-[84px] min-w-0 shrink flex-col items-center rounded-lg border p-1 transition-[transform,box-shadow,opacity] md:w-[78px] md:p-1.5 lg:w-[84px] lg:rounded-[10px]',
-                  c.type === 'break' ? 'border-[#e8cfc3] bg-[#fff8f3]' : 'border-[#dddcc6] bg-[#fffef4]',
+                  c.type === 'break' ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-white',
                   active
-                    ? '-translate-y-1.5 shadow-[0_0_0_2.5px_#79915c,0_5px_0_#ced6bb]'
-                    : clsx('shadow-[0_3px_0_#e4e5d7] hover:-translate-y-1', selected >= 0 && 'opacity-60 hover:opacity-100'),
+                    ? '-translate-y-1.5 shadow-md ring-2 ring-brand-600'
+                    : clsx('shadow-sm hover:-translate-y-1', selected >= 0 && 'opacity-60 hover:opacity-100'),
                   selected < 0 && 'animate-[pulse_2s_ease-in-out_infinite]',
                 )}
               >
-                <small className="self-start text-[7px] tracking-wide text-[#7d876a] md:text-[8px]">
+                <small className="self-start text-[7px] tracking-wide text-slate-400 md:text-[8px]">
                   {c.type === 'path' ? t('tag.trail') : t('tag.action')}
                 </small>
                 <div className="flex min-h-0 w-full flex-1 items-center justify-center">
@@ -76,7 +76,7 @@ export function Hand() {
                 </div>
                 <b className="mt-0.5 line-clamp-2 text-center text-[8px] leading-tight font-medium md:text-[9px]">{t(cardNameKey(c))}</b>
                 {active && (
-                  <span className="absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-moss text-white">
+                  <span className="absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-brand-600 text-white">
                     <Check size={11} strokeWidth={3} />
                   </span>
                 )}
@@ -90,7 +90,7 @@ export function Hand() {
               <button
                 type="button"
                 onClick={() => openModal({ kind: 'result' })}
-                className="rounded-xl bg-forest px-4 py-3 text-sm font-medium text-white"
+                className="rounded-xl bg-brand-700 px-4 py-3 text-sm font-medium text-white"
               >
                 {game.phase === 'matchOver' ? t('match.eyebrow') : t('result.next')}
               </button>
@@ -102,12 +102,12 @@ export function Hand() {
       </div>
 
       {human && (
-        <div className="flex items-center justify-end gap-2 md:border-t md:border-[#e9ecdf] md:py-2.5">
+        <div className="flex items-center justify-end gap-2 md:border-t md:border-slate-100 md:py-2.5">
           {card?.type === 'path' && (
             <button
               type="button"
               onClick={flipCard}
-              className="flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-[#3f5a35]"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               <FlipVertical2 size={14} /> {t('hand.flip')}
             </button>
@@ -117,7 +117,7 @@ export function Hand() {
             title={t('caption.pass')}
             onClick={pass}
             disabled={!player.hand.length}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-[#3f5a35] disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40"
           >
             <SkipForward size={14} /> {t('hand.pass')}
           </button>
@@ -137,19 +137,19 @@ function StepGuide({ step }: { step: number }) {
         const state = step > n ? 'done' : step === n ? 'now' : 'later'
         return (
           <li key={n} className="flex min-w-0 items-center gap-1">
-            {i > 0 && <span className={clsx('h-px w-2 shrink-0 sm:w-5', state === 'later' ? 'bg-line-strong' : 'bg-sage')} />}
+            {i > 0 && <span className={clsx('h-px w-2 shrink-0 sm:w-5', state === 'later' ? 'bg-line-strong' : 'bg-brand-400')} />}
             <span
               className={clsx(
                 'flex min-w-0 items-center gap-1 rounded-full px-1.5 py-0.5 md:px-2 md:py-1',
-                state === 'now' && 'bg-forest font-semibold text-white',
-                state === 'done' && 'bg-sage-100 text-moss',
+                state === 'now' && 'bg-brand-700 font-semibold text-white',
+                state === 'done' && 'bg-brand-100 text-brand-600',
                 state === 'later' && 'text-subtle',
               )}
             >
               <span
                 className={clsx(
                   'grid size-4 shrink-0 place-items-center rounded-full text-[9px]',
-                  state === 'now' ? 'bg-white text-forest' : state === 'done' ? 'bg-moss text-white' : 'border border-line-strong',
+                  state === 'now' ? 'bg-white text-brand-700' : state === 'done' ? 'bg-brand-600 text-white' : 'border border-line-strong',
                 )}
               >
                 {state === 'done' ? <Check size={10} strokeWidth={3} /> : n}

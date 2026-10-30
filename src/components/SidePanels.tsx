@@ -9,7 +9,8 @@ import { isHumanTurn, useGameStore } from '@/store/gameStore'
 import { Dog } from './art/Dog'
 import { IconChip, logIcon, PERSONA_ICONS, REACTION_ICONS, ToolMark } from './icons'
 
-const panel = 'rounded-2xl border border-line bg-paper p-3 md:p-4'
+/** Workfit's Card: white, hairline slate border, barely-there shadow. */
+const panel = 'rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]'
 
 export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
   const t = useT()
@@ -32,11 +33,11 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
   return (
     <section className={panel}>
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="m-0 flex items-center gap-1.5 text-sm font-bold">
+        <h2 className="m-0 flex items-center gap-1.5 text-[15px] font-semibold">
           {t('party.title')}
-          <span className="rounded-md bg-[#edf0e4] px-1.5 py-0.5 text-[10px] text-muted">{game.players.length}</span>
+          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-muted">{game.players.length}</span>
         </h2>
-        <span className="rounded bg-[#f1f2e9] px-1.5 py-1 text-[9px] tracking-wide text-muted">
+        <span className="rounded bg-slate-100 px-1.5 py-1 text-[9px] tracking-wide text-muted">
           {game.mode === 'solo' ? t('party.solo') : t('party.local')}
         </span>
       </div>
@@ -53,15 +54,15 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
               className={clsx(
                 'relative my-1 flex items-center gap-1 rounded-xl border transition-opacity',
                 target
-                  ? 'animate-pulse border-[#f3c84b] bg-[#fffbe6] ring-2 ring-[#f3c84b]'
+                  ? 'animate-pulse border-brand-300 bg-brand-50 ring-2 ring-brand-400'
                   : active
-                    ? 'border-sage-200 bg-sage-100'
+                    ? 'border-brand-200 bg-brand-50'
                     : 'border-transparent',
                 targeting && !target && 'opacity-40',
               )}
             >
               {target && (
-                <span className="absolute -top-2 left-2 z-10 flex items-center gap-1 rounded-full bg-[#f3c84b] px-1.5 py-px text-[9px] font-bold text-[#5b4300]">
+                <span className="absolute -top-2 left-2 z-10 flex items-center gap-1 rounded-full bg-brand-600 px-1.5 py-px text-[9px] font-bold text-white">
                   {card?.type === 'fix' ? <HeartHandshake size={10} strokeWidth={2.6} /> : <Zap size={10} strokeWidth={2.6} />}
                   {t('party.tapMe')}
                 </span>
@@ -78,7 +79,7 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
                 >
                   <Dog color={p.color} collar={COLLAR_COLORS[i % COLLAR_COLORS.length]} className="size-[34px]" />
                   {PersonaIcon && (
-                    <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full bg-white text-[#5f7140] shadow-sm">
+                    <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full bg-white text-slate-600 shadow-sm">
                       <PersonaIcon size={11} strokeWidth={2.4} />
                     </span>
                   )}
@@ -108,16 +109,16 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
                     )}
                   </div>
                   <div className="mt-1 flex items-center gap-2" title={`${t('party.suspicion')}: ${suspicion}%`}>
-                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-[#e9ecdf]">
+                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100">
                       <div
                         className={clsx(
                           'h-full rounded-full transition-[width] duration-500',
-                          suspicion >= 60 ? 'bg-[#c0674f]' : suspicion >= 35 ? 'bg-[#d6a64b]' : 'bg-sage',
+                          suspicion >= 60 ? 'bg-rose-500' : suspicion >= 35 ? 'bg-amber-400' : 'bg-emerald-400',
                         )}
                         style={{ width: `${Math.max(3, suspicion)}%` }}
                       />
                     </div>
-                    <span className="shrink-0 text-[10px] text-[#7a8767] tabular-nums">{t('party.points', { n: score(p) })}</span>
+                    <span className="shrink-0 text-[10px] text-slate-500 tabular-nums">{t('party.points', { n: score(p) })}</span>
                   </div>
                 </div>
               </button>
@@ -128,7 +129,7 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
                   title={t('party.accuse', { name: p.name })}
                   disabled={game.accusedThisTurn}
                   onClick={() => accusePlayer(i)}
-                  className="mr-2 grid size-9 shrink-0 place-items-center rounded-full border border-[#e8ecdd] bg-white text-[#a0603f] disabled:opacity-30"
+                  className="mr-2 grid size-9 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-rose-600 disabled:opacity-30"
                 >
                   <Pointer size={16} strokeWidth={2} />
                 </button>
@@ -140,7 +141,7 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
 
       <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-[10px] text-subtle">
         <span className="flex items-center gap-1.5">
-          <span className="h-1 w-6 rounded-full bg-linear-to-r from-sage via-[#d6a64b] to-[#c0674f]" />
+          <span className="h-1 w-6 rounded-full bg-linear-to-r from-emerald-400 via-amber-400 to-rose-500" />
           {t('party.suspicion')}
         </span>
         {human && !game.accusedThisTurn && (
@@ -154,9 +155,9 @@ export function PartyPanel({ secondsLeft }: { secondsLeft: number | null }) {
         type="button"
         disabled={!human}
         onClick={() => openModal({ kind: 'role' })}
-        className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-dashed border-line-strong bg-[#f7f8ef] p-2.5 text-left disabled:opacity-40"
+        className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-dashed border-line-strong bg-slate-50 p-2.5 text-left disabled:opacity-40"
       >
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-[#5f7140]">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-slate-600">
           <KeyRound size={16} />
         </span>
         <div>
@@ -177,8 +178,8 @@ export function ActivityPanel({ onReact }: { onReact: (icon: number) => void }) 
   return (
     <section className={panel}>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="m-0 text-sm font-bold">{t('gossip.title')}</h2>
-        <span className="size-1.5 rounded-full bg-sage" />
+        <h2 className="m-0 text-[15px] font-semibold">{t('gossip.title')}</h2>
+        <span className="size-1.5 rounded-full bg-brand-400" />
       </div>
       <div aria-live="polite" className="h-[200px] overflow-auto md:h-[240px]">
         {log.slice(0, 25).map((e, i) => {
@@ -190,8 +191,8 @@ export function ActivityPanel({ onReact }: { onReact: (icon: number) => void }) 
               <div className="min-w-0">
                 {speaker ? (
                   <>
-                    <b className="font-semibold text-[#556545]">{speaker.name}</b>{' '}
-                    <span className="rounded-lg bg-[#f4f6ec] px-1.5 py-0.5 text-ink">“{translate(t.lang, e.key, e.params)}”</span>
+                    <b className="font-semibold text-slate-800">{speaker.name}</b>{' '}
+                    <span className="rounded-lg bg-slate-100 px-1.5 py-0.5 text-ink">“{translate(t.lang, e.key, e.params)}”</span>
                   </>
                 ) : (
                   t(e.key, e.params)
@@ -204,14 +205,14 @@ export function ActivityPanel({ onReact }: { onReact: (icon: number) => void }) 
           )
         })}
       </div>
-      <div className="flex items-center gap-1.5 border-t border-[#ebeee1] pt-3">
+      <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3">
         {REACTION_ICONS.map((Icon, i) => (
           <button
             key={i}
             type="button"
             aria-label={t('gossip.react')}
             onClick={() => onReact(i)}
-            className="grid size-8 place-items-center rounded-lg border border-[#e8ecdd] bg-sage-50 text-[#5f7140]"
+            className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-brand-50 text-slate-600"
           >
             <Icon size={15} />
           </button>

@@ -27,7 +27,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
   const setView = useGameStore((s) => s.setView)
   const sealed = game.phase === 'playing' && isSealed(geoOf(game), game.board, game.revealed)
   const modal = useGameStore((s) => s.modal)
-  const hint = useOrbitHint(game.match, game.round, modal !== null)
+  const hint = useOrbitHint(game.match, game.round === 1 && game.phase === 'playing' && modal === null)
   const orbit = useOrbit(view, setView, hint.dismiss)
   // The latest thing that happened, ignoring chatter, so the board can say "just now…".
   const last = game.log.find((e) => e.speaker === undefined)
@@ -54,7 +54,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
   return (
     <>
       <div className="hidden items-center gap-3 px-6 py-4 md:flex">
-        <WorldIcon size={22} className="text-[#a9ae6e]" />
+        <WorldIcon size={22} className="text-brand-500" />
         <div>
           <b className="block text-sm font-semibold">{t(`world.${game.theme}`)}</b>
           <small className="mt-0.5 block text-[11px] text-muted">{t(`world.${game.theme}.sub`)}</small>
@@ -78,8 +78,8 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
       >
         <GardenBackdrop className="garden-backdrop absolute inset-0 size-full transition-[filter] duration-1000" />
 
-        <div className="absolute top-2.5 left-2.5 z-20 flex max-w-[60%] items-center gap-2 rounded-xl bg-white/90 py-1.5 pr-3 pl-1.5 shadow-[0_4px_14px_#4b653118] md:top-4 md:left-5 md:py-2 md:pl-2">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#f3efdb] text-[#8a6a3c] md:size-10">
+        <div className="absolute top-2.5 left-2.5 z-20 flex max-w-[60%] items-center gap-2 rounded-xl bg-white/90 py-1.5 pr-3 pl-1.5 shadow-sm shadow-slate-900/5 md:top-4 md:left-5 md:py-2 md:pl-2">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-slate-600 md:size-10">
             <Mission size={20} strokeWidth={1.8} />
           </span>
           <div className="min-w-0">
@@ -98,7 +98,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
                 aria-label={t(`world.${theme}`)}
                 aria-pressed={game.theme === theme}
                 onClick={() => setTheme(theme)}
-                className={clsx('grid size-7 place-items-center rounded-full', game.theme === theme ? 'bg-forest text-white' : 'text-[#66804c]')}
+                className={clsx('grid size-7 place-items-center rounded-full', game.theme === theme ? 'bg-brand-700 text-white' : 'text-slate-500 hover:text-slate-900')}
               >
                 <Icon size={15} />
               </button>
@@ -116,7 +116,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
         {hint.show && <OrbitHint label={t('view.hint')} />}
 
         {sealed && (
-          <div className="absolute top-14 left-1/2 z-20 flex w-[min(92%,420px)] -translate-x-1/2 animate-pop items-start gap-2 rounded-xl bg-[#fff1e6] px-3 py-2 text-[12px] leading-snug text-[#8a4a2b] shadow-[0_6px_20px_#8a4a2b22] ring-1 ring-[#f1cdb5]">
+          <div className="absolute top-14 left-1/2 z-20 flex w-[min(92%,420px)] -translate-x-1/2 animate-pop items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] leading-snug text-amber-900 shadow-sm ring-1 ring-amber-200">
             <Construction size={16} className="mt-0.5 shrink-0" />
             <span>
               <b>{t('sealed.title')}</b> {t('sealed.body')}
@@ -124,7 +124,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
           </div>
         )}
 
-        <div className="absolute top-12 right-2 z-20 flex flex-col overflow-hidden rounded-xl bg-white/90 shadow-[0_3px_12px_#364b2025] md:top-1/2 md:right-4 md:-translate-y-1/2">
+        <div className="absolute top-12 right-2 z-20 flex flex-col overflow-hidden rounded-xl bg-white/90 shadow-sm shadow-slate-900/10 md:top-1/2 md:right-4 md:-translate-y-1/2">
           {tools.map(({ label, Icon, onClick }) => (
             <button
               key={label}
@@ -132,7 +132,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
               aria-label={label}
               title={label}
               onClick={onClick}
-              className="grid size-8 place-items-center border-b border-[#e3e8d6] text-[#3f5a35] last:border-b-0 active:bg-sage-100 md:size-9"
+              className="grid size-8 place-items-center border-b border-slate-100 text-slate-700 last:border-b-0 hover:bg-slate-50 active:bg-brand-50 md:size-9"
             >
               <Icon size={16} strokeWidth={2} />
             </button>
@@ -142,7 +142,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
         {last && (
           <div
             key={`${last.time}-${last.key}`}
-            className="absolute bottom-2.5 left-2.5 z-20 flex max-w-[calc(100%-64px)] animate-pop items-center gap-2 rounded-xl bg-white/90 py-1.5 pr-3 pl-1.5 text-[11px] leading-snug text-ink shadow-[0_4px_14px_#36502322] md:bottom-4 md:left-5 md:text-xs"
+            className="absolute bottom-2.5 left-2.5 z-20 flex max-w-[calc(100%-64px)] animate-pop items-center gap-2 rounded-xl bg-white/90 py-1.5 pr-3 pl-1.5 text-[11px] leading-snug text-ink shadow-sm shadow-slate-900/10 md:bottom-4 md:left-5 md:text-xs"
           >
             <IconChip icon={logIcon(last.key)} />
             <span className="line-clamp-2">
@@ -159,7 +159,7 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
               key={r.id}
               size={36}
               strokeWidth={1.8}
-              className="pointer-events-none absolute bottom-[20%] z-30 animate-float-up text-white drop-shadow-[0_2px_6px_#1f332580]"
+              className="pointer-events-none absolute bottom-[20%] z-30 animate-float-up text-white drop-shadow-[0_2px_6px_rgba(15,23,42,0.5)]"
               style={{ left: `${r.left}%` }}
             />
           )
@@ -216,19 +216,24 @@ function useOrbit(
 
 /**
  * Shows the "drag to look around" hint once at the start of each match, as soon as the
- * setup and tutorial dialogs are out of the way. It goes after the first drag or 6 seconds.
+ * setup and tutorial dialogs are out of the way and the first round is in play. It goes
+ * after the first drag or 6 seconds, and never comes back for that match.
  */
-function useOrbitHint(match: number, round: number, dialogOpen: boolean) {
+function useOrbitHint(match: number, ready: boolean) {
   const [shownFor, setShownFor] = useState<number | null>(null)
   const [dismissed, setDismissed] = useState<number | null>(null)
-  const due = round === 1 && !dialogOpen && dismissed !== match
+  const due = ready && dismissed !== match
 
   useEffect(() => {
-    if (!due) return
-    setShownFor(match)
-    const timer = setTimeout(() => setDismissed(match), 6000)
+    if (due && shownFor !== match) setShownFor(match)
+  }, [due, match, shownFor])
+
+  // Once it has appeared, it always goes away after 6 seconds, even if a dialog interrupts.
+  useEffect(() => {
+    if (shownFor === null) return
+    const timer = setTimeout(() => setDismissed(shownFor), 6000)
     return () => clearTimeout(timer)
-  }, [due, match])
+  }, [shownFor])
 
   return { show: due && shownFor === match, dismiss: () => setDismissed(match) }
 }
@@ -236,11 +241,11 @@ function useOrbitHint(match: number, round: number, dialogOpen: boolean) {
 function OrbitHint({ label }: { label: string }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
-      <div className="flex animate-pop flex-col items-center gap-2 rounded-2xl bg-forest/85 px-5 py-4 text-white shadow-[0_10px_30px_#1f332555] backdrop-blur-sm">
+      <div className="flex animate-pop flex-col items-center gap-2 rounded-2xl bg-slate-900/85 px-5 py-4 text-white shadow-xl shadow-slate-900/20 backdrop-blur-sm">
         <div className="relative grid size-16 place-items-center">
           <svg viewBox="0 0 64 64" className="absolute inset-0 animate-orbit" aria-hidden="true">
-            <path d="M32 6a26 26 0 1 1-24.5 17.3" fill="none" stroke="#dce8b8" strokeWidth="4" strokeLinecap="round" />
-            <path d="M3 14l4.5 9.5L17 19" fill="none" stroke="#dce8b8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M32 6a26 26 0 1 1-24.5 17.3" fill="none" stroke="#c4b5fd" strokeWidth="4" strokeLinecap="round" />
+            <path d="M3 14l4.5 9.5L17 19" fill="none" stroke="#c4b5fd" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span className="text-[13px] font-bold">360°</span>
         </div>

@@ -8,6 +8,7 @@ import { rich, useT } from '@/i18n'
 import { TIMER_OPTIONS, useGameStore } from '@/store/gameStore'
 import { Dog } from './art/Dog'
 import { Dialog, DialogHeading, primaryButton, secondaryButton } from './Dialog'
+import { Segmented } from './Segmented'
 import { LOOT_ICONS, MISSION_ICONS, PERSONA_ICONS, RockIcon } from './icons'
 
 const body = 'mb-5 text-sm leading-[1.8] text-muted whitespace-pre-line'
@@ -47,8 +48,9 @@ function SetupModal() {
   const [names, setNames] = useState<string[]>(() =>
     Array.from({ length: MAX_PLAYERS }, (_, i) => (game.players[i] && !game.players[i].persona ? game.players[i].name : '')),
   )
-  const field = 'w-full rounded-lg border border-[#dce3cf] bg-white p-3 text-[#365139]'
-  const label = 'mt-3 mb-1.5 block text-left text-xs'
+  const field =
+    'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[15px] text-ink outline-none transition-colors placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 sm:h-10 sm:rounded-lg sm:text-sm'
+  const label = 'mt-4 mb-1.5 block text-left text-sm font-medium text-slate-700'
   const setName = (i: number, v: string) => setNames((ns) => ns.map((n, j) => (j === i ? v : n)))
 
   return (
@@ -63,53 +65,47 @@ function SetupModal() {
           newMatch({ mode, names: filled, size })
         }}
       >
-        <DialogHeading icon={<Dog className="mx-auto h-[90px]" />} eyebrow={t('setup.eyebrow')} title={t('setup.title')} />
+        <DialogHeading icon={<Dog className="mx-auto h-16" />} eyebrow={t('setup.eyebrow')} title={t('setup.title')} />
         <p className={body}>{t('setup.body')}</p>
 
-        <label htmlFor="game-mode" className={label}>
-          {t('setup.mode')}
-        </label>
-        <select id="game-mode" className={field} value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-          <option value="solo">{t('setup.solo')}</option>
-          <option value="local">{t('setup.local')}</option>
-        </select>
+        <div className="text-left">
+          <div className={label}>{t('setup.mode')}</div>
+          <Segmented
+            label={t('setup.mode')}
+            value={mode}
+            onChange={setMode}
+            options={[
+              { id: 'solo', label: t('setup.solo') },
+              { id: 'local', label: t('setup.local') },
+            ]}
+          />
 
-        <label htmlFor="pack-size" className={label}>
-          {t('setup.size')}
-        </label>
-        <select id="pack-size" className={field} value={count} onChange={(e) => setCount(Number(e.target.value))}>
-          {Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => MIN_PLAYERS + i).map((n) => (
-            <option key={n} value={n}>
-              {t('setup.dogs', { n })}
-            </option>
-          ))}
-        </select>
+          <div className={label}>{t('setup.size')}</div>
+          <Segmented
+            label={t('setup.size')}
+            value={count}
+            onChange={setCount}
+            options={Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => MIN_PLAYERS + i).map((n) => ({
+              id: n,
+              label: String(n),
+            }))}
+          />
 
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label htmlFor="board-size" className={label}>
-              {t('setup.board')}
-            </label>
-            <select id="board-size" className={field} value={size} onChange={(e) => setSize(e.target.value as BoardSize)}>
-              {(Object.keys(BOARD_SIZES) as BoardSize[]).map((b) => (
-                <option key={b} value={b}>
-                  {t(`setup.board.${b}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="turn-timer" className={label}>
-              {t('setup.timer')}
-            </label>
-            <select id="turn-timer" className={field} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))}>
-              {TIMER_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n ? t('setup.timer.n', { n }) : t('setup.timer.0')}
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className={label}>{t('setup.board')}</div>
+          <Segmented
+            label={t('setup.board')}
+            value={size}
+            onChange={setSize}
+            options={(Object.keys(BOARD_SIZES) as BoardSize[]).map((b) => ({ id: b, label: t(`setup.boardShort.${b}`) }))}
+          />
+
+          <div className={label}>{t('setup.timer')}</div>
+          <Segmented
+            label={t('setup.timer')}
+            value={turnSeconds}
+            onChange={setTurnSeconds}
+            options={TIMER_OPTIONS.map((n) => ({ id: n, label: n ? t('setup.timer.n', { n }) : t('setup.timer.0') }))}
+          />
         </div>
 
         {mode === 'solo' ? (
@@ -138,7 +134,7 @@ function SetupModal() {
           </fieldset>
         )}
 
-        <p className="my-3 text-[11px] leading-relaxed text-muted">{t('setup.note')}</p>
+        <p className="my-4 text-left text-xs leading-relaxed text-muted">{t('setup.note')}</p>
         <button type="submit" className={primaryButton}>
           {t('setup.start')}
         </button>
@@ -163,10 +159,10 @@ function HelpModal() {
       </ul>
       <div className="my-4 grid grid-cols-2 gap-2 text-left text-[11px] text-muted sm:grid-cols-3">
         {Object.values(PERSONAS).map((p) => (
-          <div key={p.id} className="rounded-lg bg-sage-50 px-2 py-1.5">
+          <div key={p.id} className="rounded-lg bg-brand-50 px-2 py-1.5">
             {(() => {
               const Icon = PERSONA_ICONS[p.id]
-              return <Icon size={13} className="mr-1 inline text-[#5f7140]" />
+              return <Icon size={13} className="mr-1 inline text-slate-600" />
             })()}
             <b className="text-ink">{p.name}</b>
             <div>{t(`persona.${p.id}`)}</div>
@@ -200,7 +196,7 @@ function RoleModal() {
       />
       <p className={body}>{sneaky ? t('role.sneaky.body', { item }) : t('role.hunter.body', { item })}</p>
       {known.some(Boolean) && (
-        <div className="mb-4 rounded-xl bg-sage-50 p-3 text-sm">
+        <div className="mb-4 rounded-xl bg-brand-50 p-3 text-sm">
           <div className="mb-2 text-[10px] tracking-widest text-subtle">{t('role.knowledge')}</div>
           <div className="flex justify-center gap-4">
             {known.map((k, g) => (
@@ -310,9 +306,9 @@ function ResultModal() {
           const p = game.players[i]
           const loot = payout(i)
           return (
-            <li key={i} className="flex items-center gap-2 rounded-lg bg-sage-50 px-3 py-2">
+            <li key={i} className="flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2">
               {matchOver && <b className="w-5 text-subtle">{table.find((r) => r.i === i)!.place}</b>}
-              {p.role === 'sneaky' ? <VenetianMask size={15} className="shrink-0 text-[#a0603f]" /> : <PawPrint size={15} className="shrink-0 text-moss" />}
+              {p.role === 'sneaky' ? <VenetianMask size={15} className="shrink-0 text-rose-600" /> : <PawPrint size={15} className="shrink-0 text-brand-600" />}
               <b className="truncate">{p.name}</b>
               <span className="text-[11px] text-muted">{p.role === 'sneaky' ? t('role.sneaky') : t('role.hunter')}</span>
               <span className="ml-auto flex items-center gap-1.5">
@@ -320,7 +316,7 @@ function ResultModal() {
                   const Loot = LOOT_ICONS[c.value]
                   return <Loot key={j} size={15} className="text-[#b8862b]" aria-label={`+${c.value}`} />
                 })}
-                <b className="w-14 text-right text-[12px] text-forest">{t('match.pts', { n: score(p) })}</b>
+                <b className="w-14 text-right text-[12px] text-brand-700">{t('match.pts', { n: score(p) })}</b>
               </span>
             </li>
           )
@@ -362,7 +358,7 @@ function TutorialModal() {
     <Dialog label={t(`tutorial.${slide.n}.title`)} onDismiss={closeModal}>
       <div className="mb-3 flex justify-center gap-1.5" aria-hidden="true">
         {TUTORIAL.map((_, j) => (
-          <span key={j} className={clsx('h-1.5 rounded-full transition-all', j === i ? 'w-6 bg-forest' : 'w-1.5 bg-line-strong')} />
+          <span key={j} className={clsx('h-1.5 rounded-full transition-all', j === i ? 'w-6 bg-brand-700' : 'w-1.5 bg-line-strong')} />
         ))}
       </div>
       <DialogHeading icon={<slide.icon size={48} strokeWidth={1.5} />} eyebrow={t('tutorial.step', { n: i + 1, total: TUTORIAL.length })} title={t(`tutorial.${slide.n}.title`)} />

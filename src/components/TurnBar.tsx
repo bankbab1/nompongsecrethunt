@@ -29,7 +29,7 @@ export function TurnBar({ secondsLeft }: { secondsLeft: number | null }) {
     <div
       className={clsx(
         'flex flex-wrap items-center gap-x-4 gap-y-2 border-y px-3 py-2.5 transition-colors sm:px-6',
-        youAreUp ? 'border-[#cfdcae] bg-[#eef5d9]' : 'border-line bg-[#f6f7f0]',
+        youAreUp ? 'border-brand-200 bg-brand-50' : 'border-line bg-slate-50',
       )}
       aria-live="polite"
     >
@@ -37,7 +37,7 @@ export function TurnBar({ secondsLeft }: { secondsLeft: number | null }) {
         <div
           className={clsx(
             'relative grid size-10 shrink-0 place-items-center rounded-full',
-            youAreUp && (urgent ? 'shadow-[0_0_0_3px_#c0674f]' : 'shadow-[0_0_0_3px_#8ca06c]'),
+            youAreUp && (urgent ? 'shadow-[0_0_0_3px_#e11d48]' : 'shadow-[0_0_0_3px_#8b5cf6]'),
             turnShake(youAreUp, secondsLeft),
           )}
           style={{ background: AVATAR_BACKGROUNDS[game.turn] }}
@@ -48,7 +48,7 @@ export function TurnBar({ secondsLeft }: { secondsLeft: number | null }) {
           )}
         </div>
         <div className="min-w-0">
-          <div className={clsx('truncate font-display text-base font-bold sm:text-lg', youAreUp ? 'text-forest' : 'text-ink')}>
+          <div className={clsx('truncate font-display text-base font-semibold sm:text-lg', youAreUp ? 'text-brand-700' : 'text-ink')}>
             {!playing ? t('turn.over') : youAreUp ? t('turn.you') : t('turn.other', { name: current.name })}
           </div>
           {playing && !human && (
@@ -82,14 +82,14 @@ export function TurnBar({ secondsLeft }: { secondsLeft: number | null }) {
                 <span
                   className={clsx(
                     'flex items-center gap-1 rounded-full border py-0.5 pr-2 pl-0.5 text-[10px]',
-                    pos === 0 ? 'border-[#9db57a] bg-white font-semibold text-forest' : 'border-transparent text-muted',
+                    pos === 0 ? 'border-brand-300 bg-white font-semibold text-brand-700' : 'border-transparent text-muted',
                   )}
                 >
                   <span className="grid size-5 place-items-center overflow-hidden rounded-full" style={{ background: AVATAR_BACKGROUNDS[i] }}>
                     <Dog color={p.color} className="size-5" />
                   </span>
                   <span className="max-w-[64px] truncate">{p.name}</span>
-                  {pos === 1 && <span className="rounded bg-[#edf2de] px-1 text-[8px] tracking-wide text-[#5f7140]">{t('turn.next')}</span>}
+                  {pos === 1 && <span className="rounded bg-brand-100 px-1 text-[8px] tracking-wide text-slate-600">{t('turn.next')}</span>}
                 </span>
               </li>
             )
@@ -106,13 +106,13 @@ function Countdown({ left, total, urgent, label }: { left: number; total: number
   return (
     <div className={clsx('relative grid size-11 place-items-center', urgent && 'animate-pulse')} role="timer" aria-label={label}>
       <svg viewBox="0 0 40 40" className="absolute inset-0 -rotate-90">
-        <circle cx="20" cy="20" r={r} fill="white" stroke="#e1e8ce" strokeWidth="4" />
+        <circle cx="20" cy="20" r={r} fill="white" stroke="#ede9fe" strokeWidth="4" />
         <circle
           cx="20"
           cy="20"
           r={r}
           fill="none"
-          stroke={urgent ? '#c0674f' : '#557147'}
+          stroke={urgent ? '#e11d48' : '#6d28d9'}
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={c}
@@ -120,7 +120,7 @@ function Countdown({ left, total, urgent, label }: { left: number; total: number
           className="transition-[stroke-dashoffset] duration-1000 ease-linear"
         />
       </svg>
-      <span className={clsx('relative text-xs font-bold tabular-nums', urgent ? 'text-[#b4533c]' : 'text-forest')}>{Math.max(0, left)}</span>
+      <span className={clsx('relative text-xs font-bold tabular-nums', urgent ? 'text-rose-600' : 'text-brand-700')}>{Math.max(0, left)}</span>
     </div>
   )
 }
@@ -129,7 +129,7 @@ function ThinkingDots() {
   return (
     <span className="flex gap-0.5" aria-hidden="true">
       {[0, 150, 300].map((d) => (
-        <span key={d} className="size-1 animate-bounce rounded-full bg-sage" style={{ animationDelay: `${d}ms` }} />
+        <span key={d} className="size-1 animate-bounce rounded-full bg-brand-400" style={{ animationDelay: `${d}ms` }} />
       ))}
     </span>
   )
@@ -138,7 +138,7 @@ function ThinkingDots() {
 function PersonaBadge({ id }: { id: keyof typeof PERSONA_ICONS }) {
   const Icon = PERSONA_ICONS[id]
   return (
-    <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full bg-white text-[#5f7140] shadow-sm">
+    <span className="absolute -right-1 -bottom-1 grid size-[18px] place-items-center rounded-full bg-white text-slate-600 shadow-sm">
       <Icon size={11} strokeWidth={2.4} />
     </span>
   )

@@ -147,3 +147,34 @@ export function isSealed(geo: Geometry, board: Board, revealed: number[]): boole
   if (!pending.length) return false
   return frontier(geo, board, open).length === 0 && goalsReached(geo, board, open).every((g) => revealed.includes(g))
 }
+
+/**
+ * The tiles of the shortest open trail from Nompong into a hiding spot, start first, or an
+ * empty list when the trail doesn't reach it. Used to light up the winning route.
+ */
+export function trailTo(geo: Geometry, board: Board, goal: number): string[] {
+  const target = geo.goals[goal]
+  const parent = new Map<string, string | null>([[geo.startKey, null]])
+  const queue: [number, number][] = [[geo.start.x, geo.start.y]]
+  while (queue.length) {
+    const [x, y] = queue.shift()!
+    const k = key(x, y)
+    const tile = board[k]
+    for (const [dx, dy, bit, opposite] of DIRS) {
+      if (!(tile.mask & bit)) continue
+      const nx = x + dx
+      const ny = y + dy
+      if (nx === target.x && ny === target.y) {
+        const route: string[] = []
+        for (let at: string | null = k; at; at = parent.get(at) ?? null) route.unshift(at)
+        return route
+      }
+      const nk = key(nx, ny)
+      const n = board[nk]
+      if (!n || n.dead || !(n.mask & opposite) || parent.has(nk)) continue
+      parent.set(nk, k)
+      queue.push([nx, ny])
+    }
+  }
+  return []
+}

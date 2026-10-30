@@ -1,29 +1,34 @@
-/* Garden palette for the Secret Hunt. Components use these names (bg-forest, text-ink,
-   border-line…) rather than raw hex, so a palette change only touches this file.
-   The SVG art in components/art keeps its own illustration colours. */
+/* Workfit's scheme: slate neutrals, one violet accent (the same brand scale Workfit uses),
+   IBM Plex Sans Thai. Components use these names (bg-brand-700, text-ink, border-line…) rather
+   than raw hex. The garden itself (meadow, sun, the SVG art) keeps its illustration colours. */
 @theme {
-  --color-cream: #f7f8f2;
-  --color-paper: #fcfdf8;
-  --color-ink: #263d31;
-  --color-muted: #6f7869; /* 4.6:1 on cream */
-  --color-subtle: #8a9388;
-  --color-line: #e4e8dc;
-  --color-line-strong: #d8dfca;
-  --color-forest: #304c36;
-  --color-moss: #557147;
-  --color-leaf: #6d875a;
-  --color-sage: #8ca06c;
-  --color-sage-50: #f3f5ec;
-  --color-sage-100: #eff3e3;
-  --color-sage-200: #e1e8ce;
+  --color-page: #fafafa;
+  --color-surface: #ffffff;
+  --color-ink: #0f172a; /* slate-900 */
+  --color-muted: #64748b; /* slate-500 */
+  --color-subtle: #94a3b8; /* slate-400 */
+  --color-line: #e2e8f0; /* slate-200 */
+  --color-line-strong: #cbd5e1; /* slate-300 */
+
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-200: #ddd6fe;
+  --color-brand-300: #c4b5fd;
+  --color-brand-400: #a78bfa;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-700: #6d28d9;
+  --color-brand-800: #5b21b6;
+
   --color-meadow: #dce8b8;
   --color-sun: #f6e6a7;
 
-  --font-sans: 'DM Sans', 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Manrope', 'Mitr', 'Noto Sans Thai', system-ui, sans-serif;
-  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-sans: 'IBM Plex Sans Thai', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'IBM Plex Sans Thai', ui-sans-serif, system-ui, sans-serif;
 
   --animate-pop: pop 0.3s ease-out;
+  --animate-fade: fade 0.2s ease-out both;
+  --animate-sheet-in: sheet-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-float-up: float-up 1.8s ease-out forwards;
   --animate-fall: fall 3s linear forwards;
   --animate-swipe: swipe 1.6s ease-in-out infinite;
@@ -31,7 +36,27 @@
   --animate-shake: shake 0.5s ease-in-out infinite;
   --animate-shake-hard: shake-hard 0.22s linear infinite;
   --animate-orbit: orbit 2.4s ease-in-out infinite;
+  --animate-treasure: treasure 1.6s ease-in-out infinite;
+  --animate-trail-glow: trail-glow 1.6s ease-in-out infinite;
+  --animate-sparkle: sparkle 1.4s ease-in-out infinite;
 
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* A bottom sheet coming up from below (phones), as in Workfit. */
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: none;
+    }
+  }
   @keyframes pop {
     from {
       transform: translateY(-8px);
@@ -113,6 +138,47 @@
     }
     100% {
       transform: rotate(360deg);
+    }
+  }
+  /* The right hiding spot: a warm golden pulse you can't miss. */
+  @keyframes treasure {
+    0%,
+    100% {
+      box-shadow:
+        0 5px 0 #c99a2e,
+        0 0 0 3px #f3c84b,
+        0 0 14px 4px #f3c84b88;
+    }
+    50% {
+      box-shadow:
+        0 5px 0 #c99a2e,
+        0 0 0 5px #f3c84b,
+        0 0 30px 12px #f3c84bcc;
+    }
+  }
+  /* The route the pack took to the treasure, lit up from the inside. */
+  @keyframes trail-glow {
+    0%,
+    100% {
+      box-shadow:
+        0 4px 0 #c99a2e,
+        inset 0 0 0 100px #ffe58f40;
+    }
+    50% {
+      box-shadow:
+        0 4px 0 #c99a2e,
+        inset 0 0 0 100px #ffd75a8c;
+    }
+  }
+  @keyframes sparkle {
+    0%,
+    100% {
+      transform: scale(0.4) rotate(0deg);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.1) rotate(20deg);
+      opacity: 1;
     }
   }
   @keyframes fall {

@@ -73,11 +73,11 @@ export function ToolMark({ tool, state, size = 16 }: { tool: Tool; state: 'broke
   const Icon = TOOL_ICONS[tool]
   return (
     <span className="relative inline-grid place-items-center" style={{ width: size, height: size }}>
-      <Icon size={size} strokeWidth={1.8} className={state === 'broken' ? 'text-[#b4533c]' : 'text-moss'} />
+      <Icon size={size} strokeWidth={1.8} className={state === 'broken' ? 'text-rose-600' : 'text-brand-600'} />
       {state === 'broken' ? (
         <span className="absolute inset-0 m-auto h-[2px] w-[120%] -rotate-45 rounded bg-[#b4533c]" />
       ) : (
-        <Wrench size={size * 0.55} strokeWidth={2.4} className="absolute -right-1 -bottom-1 rounded-full bg-white text-moss" />
+        <Wrench size={size * 0.55} strokeWidth={2.4} className="absolute -right-1 -bottom-1 rounded-full bg-white text-brand-600" />
       )}
     </span>
   )
@@ -87,9 +87,9 @@ export function ToolMark({ tool, state, size = 16 }: { tool: Tool; state: 'broke
 export function CardGlyph({ card, size = 26 }: { card: Card; size?: number }) {
   switch (card.type) {
     case 'sniff':
-      return <Search size={size} strokeWidth={1.6} className="text-[#5f7140]" />
+      return <Search size={size} strokeWidth={1.6} className="text-slate-600" />
     case 'dig':
-      return <Shovel size={size} strokeWidth={1.6} className="text-[#8a6a3c]" />
+      return <Shovel size={size} strokeWidth={1.6} className="text-slate-600" />
     case 'break':
       return <ToolMark tool={card.tool} state="broken" size={size} />
     case 'fix':
@@ -132,7 +132,7 @@ export function logIcon(key: string): LucideIcon {
 /** A round icon chip used in the activity feed and the "just now" banner. */
 export function IconChip({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
   return (
-    <span className={clsx('grid size-6 shrink-0 place-items-center rounded-md bg-[#f0f2e6] text-[#5f7140]', className)}>
+    <span className={clsx('grid size-6 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600', className)}>
       <Icon size={14} strokeWidth={2} />
     </span>
   )

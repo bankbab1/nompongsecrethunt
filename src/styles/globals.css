@@ -8,16 +8,23 @@ body,
 }
 
 body {
-  background: var(--color-cream);
+  background: var(--color-page);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  /* Comfortable reading line-height for Thai (tone marks above, vowels below). */
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Headings are semibold (600), as in Workfit; bold is kept for numbers and codes. */
 h1,
 h2,
 h3 {
   font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 button:not(:disabled) {
@@ -25,13 +32,13 @@ button:not(:disabled) {
 }
 
 :focus-visible {
-  outline: 3px solid #8a9e4d;
-  outline-offset: 3px;
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-line-strong) transparent;
+  scrollbar-color: rgb(148 163 184 / 0.5) transparent;
 }
 
 /* Moonlight and blossom worlds recolour the backdrop rather than redrawing it. */

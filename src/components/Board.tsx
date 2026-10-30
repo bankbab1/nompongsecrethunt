@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
-import { geoOf, goalAt, isLegal, isStartCell, key, network } from '@/game/board'
-import { Shovel } from 'lucide-react'
+import { Sparkles, Shovel } from 'lucide-react'
+import { geoOf, goalAt, isLegal, isStartCell, key, network, trailTo } from '@/game/board'
 import { useT } from '@/i18n'
 import { isHumanTurn, selectedMask, useGameStore } from '@/store/gameStore'
 import { Dog } from './art/Dog'
@@ -38,6 +38,8 @@ export function Board() {
   const last = game.lastAction
   const Treasure = MISSION_ICONS[game.mission]
   const iconSize = Math.max(14, Math.round(cell * 0.5))
+  // Once the treasure is uncovered by the trail, light up the route the pack took to it.
+  const winningTrail = game.result?.winner === 'hunters' ? trailTo(geo, game.board, game.treasure) : []
   // Only the dog holding the device sees its own sniffs.
   const known = human ? game.knowledge[game.turn] : [null, null, null]
 
@@ -53,6 +55,9 @@ export function Board() {
       const target =
         (sniffing && goal !== null && !revealed) || (digging && tile !== undefined && !start)
       const justPlayed = last && (last.kind === 'path' || last.kind === 'dig') && last.x === x && last.y === y
+      const isTreasure = revealed && goal === game.treasure
+      const isRock = revealed && goal !== game.treasure
+      const onWinningTrail = winningTrail.indexOf(key(x, y))
 
       let label = t('cell.empty', { x, y })
       if (goal !== null) label = t('cell.goal', { n: goal + 1 })
@@ -71,15 +76,21 @@ export function Board() {
             start
               ? 'overflow-visible border-[#e6dfb8] bg-[#f6efcf] shadow-[0_4px_0_#acb97e]'
               : goal !== null
-                ? clsx('border-[#dce6b7] shadow-[0_5px_0_#a2ba77]', revealed ? 'bg-sun' : 'bg-[#cedda8]')
+                ? isTreasure
+                  ? 'z-20 animate-treasure border-[#e9b93a] bg-linear-to-b from-[#fff6cf] to-[#f6d36b] shadow-[0_5px_0_#c99a2e]'
+                  : isRock
+                    ? 'border-[#cfcac0] bg-[#e3e1da] shadow-[0_5px_0_#b9b4a8] saturate-50'
+                    : 'border-[#dce6b7] bg-[#cedda8] shadow-[0_5px_0_#a2ba77]'
                 : tile
                   ? 'animate-pop border-[#c5ce93] bg-linear-145 from-[#e9e6c0] to-[#d0d7a2] shadow-[0_4px_0_#a3b77b,0_7px_12px_#69834b22]'
                   : 'border-[#aec68135] bg-[#c9dba055] hover:bg-[#f5fac655]',
             valid && !previewing && 'border-dashed border-[#fbffe5a6] bg-[#edf4c035]',
-            previewing && 'z-10 bg-[#f9ffd2] shadow-[0_0_0_3px_#54783f]',
-            target && 'z-10 animate-pulse ring-3 ring-[#f3c84b]',
-            justPlayed && !target && 'z-[5] ring-2 ring-[#f3c84b]/80',
+            previewing && 'z-10 bg-brand-50 shadow-[0_0_0_3px_#7c3aed]',
+            target && 'z-10 animate-pulse ring-3 ring-brand-500',
+            justPlayed && !target && 'z-[5] ring-2 ring-brand-500/80',
+            onWinningTrail >= 0 && 'z-[6] animate-trail-glow ring-2 ring-[#f3c84b]',
           )}
+          style={onWinningTrail >= 0 ? { animationDelay: `${onWinningTrail * 90}ms` } : undefined}
         >
           {previewing && card?.type === 'path' ? (
             <Trail mask={mask} dead={card.dead} />
@@ -92,16 +103,44 @@ export function Board() {
             </>
           ) : goal !== null ? (
             <>
-              <span className="grid size-full place-items-center text-[#5f7140]">
+              <span className={clsx('grid size-full place-items-center', isRock ? 'text-[#8b867b]' : 'text-[#5f7140]')}>
                 {(() => {
-                  const Icon = revealed ? (goal === game.treasure ? Treasure : RockIcon) : GOAL_ICONS[goal]
-                  return <Icon size={iconSize} strokeWidth={1.7} className={revealed && goal === game.treasure ? 'text-[#b8862b]' : undefined} />
+                  const Icon = isTreasure ? Treasure : isRock ? RockIcon : GOAL_ICONS[goal]
+                  return (
+                    <Icon
+                      size={isTreasure ? iconSize * 1.25 : iconSize}
+                      strokeWidth={isTreasure ? 2 : 1.7}
+                      className={isTreasure ? 'animate-pop text-[#9a6b0c] drop-shadow-[0_2px_4px_#fff8]' : undefined}
+                    />
+                  )
                 })()}
               </span>
+              {isTreasure && (
+                <>
+                  <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 animate-pop rounded-full bg-[#9a6b0c] px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-white shadow-md">
+                    {t('board.treasureHere')}
+                  </span>
+                  {[
+                    '-top-2 -left-2',
+                    '-right-2 -bottom-1',
+                    '-bottom-2 -left-1',
+                    '-top-1 -right-2',
+                  ].map((pos, i) => (
+                    <Sparkles
+                      key={pos}
+                      size={12}
+                      strokeWidth={2.4}
+                      className={clsx('pointer-events-none absolute animate-sparkle text-[#e8a92a]', pos)}
+                      style={{ animationDelay: `${i * 350}ms` }}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </>
+              )}
               {!revealed && (
                 <span
                   title={known[goal] ? t('cell.youSniffed', { what: t(known[goal] === 'treasure' ? 'peek.treasure' : 'peek.rock') }) : undefined}
-                  className="absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-[#ffffed] text-[11px] font-bold text-[#78935c] shadow-[0_2px_5px_#78935c22]"
+                  className="absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-white text-[11px] font-bold text-brand-700 shadow-sm"
                 >
                   {known[goal] === 'treasure' ? <Treasure size={11} strokeWidth={2.4} /> : known[goal] === 'rock' ? <RockIcon size={11} strokeWidth={2.4} /> : '?'}
                 </span>

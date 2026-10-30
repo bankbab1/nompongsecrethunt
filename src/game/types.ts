@@ -16,6 +16,7 @@ export type CardType = Card['type']
 export type Role = 'hunter' | 'sneaky'
 export type Mode = 'solo' | 'local'
 export type Theme = 'garden' | 'night' | 'pink'
+export type BoardSize = 'small' | 'classic' | 'large'
 export type Side = 'hunters' | 'sneaky'
 export type Phase = 'playing' | 'roundOver' | 'matchOver'
 export type GoalContent = 'treasure' | 'rock'
@@ -24,7 +25,7 @@ export type PersonaId = 'mochi' | 'biscuit' | 'pepper' | 'coco' | 'milo' | 'taro
 
 export interface LootCard {
   value: 1 | 2 | 3
-  /** Index into LOOT_ITEMS[value]. */
+  /** Which piece of Nompong's stuff it is; kept for variety in the loot art. */
   item: number
 }
 
@@ -56,11 +57,19 @@ export interface Claim {
  * re-rendered in either language. `speaker` marks a line a dog says out loud.
  */
 export interface LogEntry {
-  icon: string
   key: string
   params: Record<string, string | number>
   time: number
   speaker?: number
+}
+
+export interface LastAction {
+  player: number
+  kind: Move['kind']
+  x?: number
+  y?: number
+  target?: number
+  goal?: number
 }
 
 export interface RoundResult {
@@ -74,6 +83,8 @@ export interface GameState {
   version: 2
   match: number
   mode: Mode
+  /** Missing on saves from before board sizes existed, which were all small. */
+  size?: BoardSize
   round: number
   phase: Phase
   /** What Nompong is hunting for this round (index into MISSIONS). */
@@ -98,6 +109,8 @@ export interface GameState {
   /** Who opened this round; the next round starts with the dog after them. */
   roundStarter: number
   result?: RoundResult
+  /** The most recent move, so the screen can point at what just happened. */
+  lastAction?: LastAction
   log: LogEntry[]
   players: Player[]
 }

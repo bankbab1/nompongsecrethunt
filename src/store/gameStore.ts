@@ -1,14 +1,19 @@
 import { create } from 'zustand'
-import { flip, goalAt, isLegal } from '@/game/board'
+import { flip, geoOf, goalAt, isLegal } from '@/game/board'
 import { chooseAccusation, chooseBotMove } from '@/game/bot'
 import { accuse, applyMove, createMatch, cryptoRng, IllegalMove, isSavedGame, startRound } from '@/game/rules'
-import type { GameState, GoalContent, Mode, Move, Theme } from '@/game/types'
+import type { BoardSize, GameState, GoalContent, Mode, Move, Theme } from '@/game/types'
 import type { Lang, Params } from '@/i18n'
 import type { MessageKey } from '@/i18n/en'
 import { beep } from '@/lib/sound'
 
 export const SAVE_KEY = 'nompong-hunt-v2'
 export const LANG_KEY = 'nompong-hunt-lang'
+export const TIMER_KEY = 'nompong-hunt-timer'
+export const TUTORIAL_KEY = 'nompong-hunt-tutorial'
+export const TIMER_OPTIONS = [0, 30, 60] as const
+export const DEFAULT_VIEW = { tilt: 24, spin: 0 }
+export const TOP_VIEW = { tilt: 0, spin: 0 }
 
 export type Modal =
   | { kind: 'setup' }
@@ -17,6 +22,7 @@ export type Modal =
   | { kind: 'peek'; goal: number }
   | { kind: 'handoff' }
   | { kind: 'result' }
+  | { kind: 'tutorial' }
 
 interface GameStore {
   game: GameState
@@ -27,11 +33,15 @@ interface GameStore {
   /** Pass & play: the next dog hasn't taken the device yet, so their hand stays hidden. */
   awaitingHandoff: boolean
   zoom: number
+  /** Camera over the garden: tilt back from straight down, and spin around the board. */
+  view: { tilt: number; spin: number }
   sound: boolean
+  /** Seconds per human turn; 0 means no limit. */
+  turnSeconds: number
   modal: Modal | null
   toast: { key: MessageKey | (string & {}); params?: Params; id: number } | null
 
-  newMatch: (opts: { mode: Mode; names: string[] }) => void
+  newMatch: (opts: { mode: Mode; names: string[]; size?: BoardSize }) => void
   nextRound: () => void
   selectCard: (i: number) => void
   flipCard: () => void
@@ -44,8 +54,12 @@ interface GameStore {
   playBotTurn: () => void
   setTheme: (theme: Theme) => void
   setZoom: (zoom: number) => void
+  setView: (view: { tilt: number; spin: number }) => void
   toggleSound: () => void
   setLang: (lang: Lang) => void
+  setTurnSeconds: (seconds: number) => void
+  /** The turn clock ran out: pass the selected card for the player. */
+  timeUp: () => void
   openModal: (modal: Modal) => void
   closeModal: () => void
   showToast: (key: MessageKey, params?: Params) => void
@@ -87,7 +101,8 @@ function boot() {
   const game = saved ?? createMatch({ mode: 'solo', names: [lang === 'th' ? 'คุณ' : 'You', '', '', ''] }, cryptoRng)
   const handoff = game.mode === 'local' && game.phase === 'playing'
   const modal: Modal | null = game.phase !== 'playing' ? { kind: 'result' } : handoff ? { kind: 'handoff' } : saved ? null : { kind: 'setup' }
-  return { game, lang, awaitingHandoff: handoff, modal }
+  const turnSeconds = read(TIMER_KEY, (raw) => (TIMER_OPTIONS as readonly number[]).includes(Number(raw)) ? Number(raw) : null) ?? 30
+  return { game, lang, turnSeconds, awaitingHandoff: handoff, modal }
 }
 
 const initial = boot()
@@ -100,7 +115,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
     const handoff = next.mode === 'local' && next.phase === 'playing'
     set({
       game: next,
-      selected: 0,
+      selected: -1,
       flipped: false,
       preview: null,
       awaitingHandoff: handoff,
@@ -131,16 +146,21 @@ export const useGameStore = create<GameStore>()((set, get) => {
 
   return {
     ...initial,
-    selected: 0,
+    selected: -1,
     flipped: false,
     preview: null,
     zoom: 1,
+    view: DEFAULT_VIEW,
     sound: false,
     toast: null,
 
-    newMatch: ({ mode, names }) => {
-      advance(createMatch({ mode, names, previous: get().game }, cryptoRng))
-      if (mode === 'solo') toast('toast.welcome')
+    newMatch: ({ mode, names, size }) => {
+      advance(createMatch({ mode, names, size, previous: get().game }, cryptoRng))
+      // First match on this device: walk through the basics before anything else.
+      if (!read(TUTORIAL_KEY, (raw) => raw)) {
+        write(TUTORIAL_KEY, '1')
+        set({ modal: { kind: 'tutorial' } })
+      } else if (mode === 'solo') toast('toast.welcome')
     },
 
     nextRound: () => {
@@ -166,7 +186,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
       const s = get()
       if (!isHumanTurn(s)) return
       const card = currentCard()
-      if (!card) return
+      if (!card) return toast('error.noCard')
       switch (card.type) {
         case 'path':
           // First tap previews the tile, a second tap on the same spot places it.
@@ -174,7 +194,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
             play({ kind: 'path', card: s.selected, x, y, flipped: s.flipped })
           } else if (s.game.players[s.game.turn].broken.length) {
             toast('error.broken')
-          } else if (!isLegal(s.game.board, x, y, selectedMask(s))) {
+          } else if (!isLegal(geoOf(s.game), s.game.board, x, y, selectedMask(s))) {
             toast('error.illegalPath')
           } else {
             set({ preview: { x, y } })
@@ -182,7 +202,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           }
           return
         case 'sniff': {
-          const goal = goalAt(x, y)
+          const goal = goalAt(geoOf(s.game), x, y)
           if (goal === null) return toast('toast.pickSpot')
           set({ modal: { kind: 'peek', goal } })
           return
@@ -216,7 +236,8 @@ export const useGameStore = create<GameStore>()((set, get) => {
 
     pass: () => {
       const s = get()
-      if (!isHumanTurn(s) || !currentCard()) return
+      if (!isHumanTurn(s)) return
+      if (!currentCard()) return toast('error.noCard')
       play({ kind: 'pass', card: s.selected })
     },
 
@@ -239,6 +260,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
     },
 
     setTheme: (theme) => set((s) => ({ game: { ...s.game, theme } })),
+    setView: ({ tilt, spin }) => set({ view: { tilt: Math.min(65, Math.max(0, tilt)), spin } }),
     setZoom: (zoom) => set({ zoom: Math.min(1.5, Math.max(0.7, Math.round(zoom * 10) / 10)) }),
     toggleSound: () => {
       const sound = !get().sound
@@ -250,8 +272,20 @@ export const useGameStore = create<GameStore>()((set, get) => {
       set({ lang })
       write(LANG_KEY, lang)
     },
+    setTurnSeconds: (turnSeconds) => {
+      set({ turnSeconds })
+      write(TIMER_KEY, String(turnSeconds))
+    },
+    timeUp: () => {
+      const s = get()
+      if (!isHumanTurn(s) || !s.game.players[s.game.turn].hand.length) return
+      toast('toast.timeUp')
+      if (s.modal?.kind === 'peek') set({ modal: null })
+      play({ kind: 'pass', card: currentCard() ? s.selected : 0 })
+    },
     openModal: (modal) => set({ modal }),
-    closeModal: () => set({ modal: null }),
+    // A pending pass & play hand-off always comes back once other dialogs close.
+    closeModal: () => set((s) => ({ modal: s.awaitingHandoff && s.game.phase === 'playing' ? { kind: 'handoff' } : null })),
     showToast: toast,
   }
 })

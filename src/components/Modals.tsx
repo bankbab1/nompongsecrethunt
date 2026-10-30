@@ -1,12 +1,14 @@
 import clsx from 'clsx'
 import { useState } from 'react'
-import { LOOT_ITEMS, MAX_PLAYERS, MIN_PLAYERS, MISSIONS, PERSONAS, ROUNDS } from '@/game/constants'
+import { Bone, Layers, Megaphone, MicOff, PawPrint, Smartphone, Sprout, Trophy, VenetianMask } from 'lucide-react'
+import { BOARD_SIZES, DEFAULT_BOARD_SIZE, MAX_PLAYERS, MIN_PLAYERS, PERSONAS, ROUNDS } from '@/game/constants'
 import { score, standings } from '@/game/rules'
-import type { GoalContent, Mode } from '@/game/types'
+import type { BoardSize, GoalContent, Mode } from '@/game/types'
 import { rich, useT } from '@/i18n'
-import { useGameStore } from '@/store/gameStore'
+import { TIMER_OPTIONS, useGameStore } from '@/store/gameStore'
 import { Dog } from './art/Dog'
 import { Dialog, DialogHeading, primaryButton, secondaryButton } from './Dialog'
+import { LOOT_ICONS, MISSION_ICONS, PERSONA_ICONS, RockIcon } from './icons'
 
 const body = 'mb-5 text-sm leading-[1.8] text-muted whitespace-pre-line'
 const list = 'pl-5 text-left text-sm leading-[1.8] text-muted list-disc space-y-1.5'
@@ -27,6 +29,8 @@ export function Modals() {
       return <HandoffModal />
     case 'result':
       return <ResultModal />
+    case 'tutorial':
+      return <TutorialModal />
   }
 }
 
@@ -37,6 +41,9 @@ function SetupModal() {
   const closeModal = useGameStore((s) => s.closeModal)
   const [mode, setMode] = useState<Mode>(game.mode)
   const [count, setCount] = useState(game.players.length)
+  const [size, setSize] = useState<BoardSize>(game.size ?? DEFAULT_BOARD_SIZE)
+  const turnSeconds = useGameStore((s) => s.turnSeconds)
+  const setTurnSeconds = useGameStore((s) => s.setTurnSeconds)
   const [names, setNames] = useState<string[]>(() =>
     Array.from({ length: MAX_PLAYERS }, (_, i) => (game.players[i] && !game.players[i].persona ? game.players[i].name : '')),
   )
@@ -53,7 +60,7 @@ function SetupModal() {
             .slice(0, mode === 'solo' ? 1 : count)
             .map((n, i) => n.trim() || (i === 0 && mode === 'solo' ? (t.lang === 'th' ? 'คุณ' : 'You') : t('setup.player', { n: i + 1 })))
           while (filled.length < count) filled.push('')
-          newMatch({ mode, names: filled })
+          newMatch({ mode, names: filled, size })
         }}
       >
         <DialogHeading icon={<Dog className="mx-auto h-[90px]" />} eyebrow={t('setup.eyebrow')} title={t('setup.title')} />
@@ -77,6 +84,33 @@ function SetupModal() {
             </option>
           ))}
         </select>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label htmlFor="board-size" className={label}>
+              {t('setup.board')}
+            </label>
+            <select id="board-size" className={field} value={size} onChange={(e) => setSize(e.target.value as BoardSize)}>
+              {(Object.keys(BOARD_SIZES) as BoardSize[]).map((b) => (
+                <option key={b} value={b}>
+                  {t(`setup.board.${b}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="turn-timer" className={label}>
+              {t('setup.timer')}
+            </label>
+            <select id="turn-timer" className={field} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))}>
+              {TIMER_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n ? t('setup.timer.n', { n }) : t('setup.timer.0')}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         {mode === 'solo' ? (
           <>
@@ -121,7 +155,7 @@ function HelpModal() {
   const closeModal = useGameStore((s) => s.closeModal)
   return (
     <Dialog label={t('header.help')} onDismiss={closeModal}>
-      <DialogHeading icon="🌱" title={t('guide.title')} />
+      <DialogHeading icon={<Sprout size={44} strokeWidth={1.5} />} title={t('guide.title')} />
       <ul className={list}>
         {t.list('guide.items').map((item, i) => (
           <li key={i}>{rich(item)}</li>
@@ -130,7 +164,10 @@ function HelpModal() {
       <div className="my-4 grid grid-cols-2 gap-2 text-left text-[11px] text-muted sm:grid-cols-3">
         {Object.values(PERSONAS).map((p) => (
           <div key={p.id} className="rounded-lg bg-sage-50 px-2 py-1.5">
-            <span className="mr-1">{p.emoji}</span>
+            {(() => {
+              const Icon = PERSONA_ICONS[p.id]
+              return <Icon size={13} className="mr-1 inline text-[#5f7140]" />
+            })()}
             <b className="text-ink">{p.name}</b>
             <div>{t(`persona.${p.id}`)}</div>
           </div>
@@ -138,6 +175,9 @@ function HelpModal() {
       </div>
       <button type="button" className={primaryButton} onClick={closeModal}>
         {t('guide.close')}
+      </button>
+      <button type="button" className={secondaryButton} onClick={() => useGameStore.getState().openModal({ kind: 'tutorial' })}>
+        {t('tutorial.replay')}
       </button>
     </Dialog>
   )
@@ -150,10 +190,11 @@ function RoleModal() {
   const sneaky = game.players[game.turn].role === 'sneaky'
   const item = t(`mission.${game.mission}`)
   const known = game.knowledge[game.turn]
+  const Treasure = MISSION_ICONS[game.mission]
   return (
     <Dialog label={t('role.button')} onDismiss={closeModal}>
       <DialogHeading
-        icon={sneaky ? '🐿️' : '🐾'}
+        icon={sneaky ? <VenetianMask size={48} strokeWidth={1.5} /> : <PawPrint size={48} strokeWidth={1.5} />}
         eyebrow={t('role.secret')}
         title={sneaky ? t('role.sneaky.title') : t('role.hunter.title')}
       />
@@ -164,7 +205,7 @@ function RoleModal() {
           <div className="flex justify-center gap-4">
             {known.map((k, g) => (
               <span key={g} className={clsx(!k && 'opacity-30')}>
-                {g + 1}: {k === 'treasure' ? MISSIONS[game.mission] : k === 'rock' ? '🪨' : '?'}
+                {g + 1}: {k === 'treasure' ? <Treasure size={15} className="inline" /> : k === 'rock' ? <RockIcon size={15} className="inline" /> : '?'}
               </span>
             ))}
           </div>
@@ -182,16 +223,17 @@ function PeekModal({ goal }: { goal: number }) {
   const game = useGameStore((s) => s.game)
   const bark = useGameStore((s) => s.bark)
   const found = goal === game.treasure
+  const Treasure = MISSION_ICONS[game.mission]
   const item = t(`mission.${game.mission}`)
   const spot = goal + 1
   const options: { claim: GoalContent | null; text: string }[] = [
     { claim: 'treasure', text: t('bark.treasure', { item, spot }) },
     { claim: 'rock', text: t('bark.rock', { spot }) },
-    { claim: null, text: `🤐 ${t('bark.silent')}` },
+    { claim: null, text: t('bark.silent') },
   ]
   return (
     <Dialog label={t('peek.eyebrow', { spot })}>
-      <DialogHeading icon={found ? MISSIONS[game.mission] : '🪨'} eyebrow={t('peek.eyebrow', { spot })} title={found ? t('peek.treasure') : t('peek.rock')} />
+      <DialogHeading icon={found ? <Treasure size={48} strokeWidth={1.5} className="text-[#b8862b]" /> : <RockIcon size={48} strokeWidth={1.5} />} eyebrow={t('peek.eyebrow', { spot })} title={found ? t('peek.treasure') : t('peek.rock')} />
       <p className={body}>{found ? t('peek.treasureBody', { spot, item }) : t('peek.rockBody', { spot })}</p>
       <div className="mb-2 text-left text-xs font-semibold">{t('bark.prompt')}</div>
       {options.map((o) => (
@@ -199,8 +241,9 @@ function PeekModal({ goal }: { goal: number }) {
           key={String(o.claim)}
           type="button"
           onClick={() => bark(o.claim)}
-          className={clsx(o.claim === null ? secondaryButton : primaryButton, 'text-left')}
+          className={clsx(o.claim === null ? secondaryButton : primaryButton, 'flex items-center gap-2 text-left')}
         >
+          {o.claim === null ? <MicOff size={16} className="shrink-0" /> : <Megaphone size={16} className="shrink-0" />}
           {o.text}
         </button>
       ))}
@@ -214,7 +257,7 @@ function HandoffModal() {
   const takeHandoff = useGameStore((s) => s.takeHandoff)
   return (
     <Dialog label={t('handoff.eyebrow')}>
-      <DialogHeading icon="🐾" eyebrow={t('handoff.eyebrow')} title={t('handoff.title', { name })} />
+      <DialogHeading icon={<Smartphone size={44} strokeWidth={1.5} />} eyebrow={t('handoff.eyebrow')} title={t('handoff.title', { name })} />
       <p className={body}>{t('handoff.body', { name })}</p>
       <button type="button" className={primaryButton} onClick={takeHandoff}>
         {t('handoff.ready', { name })}
@@ -234,6 +277,7 @@ function ResultModal() {
 
   const item = t(`mission.${game.mission}`)
   const huntersWon = result.winner === 'hunters'
+  const Treasure = MISSION_ICONS[game.mission]
   const noSneaky = !huntersWon && !game.players.some((p) => p.role === 'sneaky')
   const matchOver = game.phase === 'matchOver'
   const payout = (i: number) => result.payouts.find((x) => x.player === i)?.loot ?? []
@@ -245,13 +289,13 @@ function ResultModal() {
     <Dialog label={t('result.eyebrow', { round: game.round, rounds: ROUNDS })} onDismiss={closeModal}>
       {matchOver ? (
         <DialogHeading
-          icon="🏆"
+          icon={<Trophy size={48} strokeWidth={1.5} className="text-[#b8862b]" />}
           eyebrow={t('match.eyebrow')}
           title={top.length > 1 ? t('match.tie') : top[0].i === 0 && you ? t('match.you') : t('match.winner', { name: top[0].name })}
         />
       ) : (
         <DialogHeading
-          icon={huntersWon ? MISSIONS[game.mission] : '🐿️'}
+          icon={huntersWon ? <Treasure size={48} strokeWidth={1.5} className="text-[#b8862b]" /> : <VenetianMask size={48} strokeWidth={1.5} />}
           eyebrow={t('result.eyebrow', { round: game.round, rounds: ROUNDS })}
           title={huntersWon ? t('result.hunters') : t('result.sneaky')}
         />
@@ -268,15 +312,14 @@ function ResultModal() {
           return (
             <li key={i} className="flex items-center gap-2 rounded-lg bg-sage-50 px-3 py-2">
               {matchOver && <b className="w-5 text-subtle">{table.find((r) => r.i === i)!.place}</b>}
-              <span>{p.role === 'sneaky' ? '🐿️' : '🐾'}</span>
+              {p.role === 'sneaky' ? <VenetianMask size={15} className="shrink-0 text-[#a0603f]" /> : <PawPrint size={15} className="shrink-0 text-moss" />}
               <b className="truncate">{p.name}</b>
               <span className="text-[11px] text-muted">{p.role === 'sneaky' ? t('role.sneaky') : t('role.hunter')}</span>
               <span className="ml-auto flex items-center gap-1.5">
-                {loot.map((c, j) => (
-                  <span key={j} title={`${c.value}`}>
-                    {LOOT_ITEMS[c.value][c.item]}
-                  </span>
-                ))}
+                {loot.map((c, j) => {
+                  const Loot = LOOT_ICONS[c.value]
+                  return <Loot key={j} size={15} className="text-[#b8862b]" aria-label={`+${c.value}`} />
+                })}
                 <b className="w-14 text-right text-[12px] text-forest">{t('match.pts', { n: score(p) })}</b>
               </span>
             </li>
@@ -296,6 +339,49 @@ function ResultModal() {
       <button type="button" className={secondaryButton} onClick={closeModal}>
         {matchOver ? t('match.view') : t('result.view')}
       </button>
+    </Dialog>
+  )
+}
+
+const TUTORIAL = [
+  { icon: Bone, n: 1 },
+  { icon: VenetianMask, n: 2 },
+  { icon: Layers, n: 3 },
+  { icon: Megaphone, n: 4 },
+  { icon: Trophy, n: 5 },
+] as const
+
+/** Five short slides for first-time players; also reachable from the guide. */
+function TutorialModal() {
+  const t = useT()
+  const closeModal = useGameStore((s) => s.closeModal)
+  const [i, setI] = useState(0)
+  const slide = TUTORIAL[i]
+  const last = i === TUTORIAL.length - 1
+  return (
+    <Dialog label={t(`tutorial.${slide.n}.title`)} onDismiss={closeModal}>
+      <div className="mb-3 flex justify-center gap-1.5" aria-hidden="true">
+        {TUTORIAL.map((_, j) => (
+          <span key={j} className={clsx('h-1.5 rounded-full transition-all', j === i ? 'w-6 bg-forest' : 'w-1.5 bg-line-strong')} />
+        ))}
+      </div>
+      <DialogHeading icon={<slide.icon size={48} strokeWidth={1.5} />} eyebrow={t('tutorial.step', { n: i + 1, total: TUTORIAL.length })} title={t(`tutorial.${slide.n}.title`)} />
+      <p className={clsx(body, 'min-h-[120px]')}>{rich(t(`tutorial.${slide.n}.body`))}</p>
+      <div className="flex gap-2">
+        {i > 0 && (
+          <button type="button" className={clsx(secondaryButton, 'flex-1')} onClick={() => setI(i - 1)}>
+            {t('tutorial.back')}
+          </button>
+        )}
+        <button type="button" className={clsx(primaryButton, 'flex-[2]')} onClick={() => (last ? closeModal() : setI(i + 1))}>
+          {last ? t('tutorial.start') : t('tutorial.next')}
+        </button>
+      </div>
+      {!last && (
+        <button type="button" className="mt-2 text-xs text-subtle underline" onClick={closeModal}>
+          {t('tutorial.skip')}
+        </button>
+      )}
     </Dialog>
   )
 }

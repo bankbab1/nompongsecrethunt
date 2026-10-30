@@ -1,8 +1,7 @@
-import { BOARD_COLS, BOARD_ROWS, DIRS, GOAL_COLUMN, GOAL_ROWS, START } from './constants'
-import type { GameState, Mask } from './types'
+import { BOARD_SIZES, DIRS } from './constants'
+import type { BoardSize, GameState, Mask } from './types'
 
 export const key = (x: number, y: number) => `${x},${y}`
-export const START_KEY = key(START.x, START.y)
 
 /** Rotate a mask clockwise `n` quarter turns. Cards only ever flip (two turns), like the real thing. */
 export function rotate(mask: Mask, n = 1): Mask {
@@ -12,11 +11,44 @@ export function rotate(mask: Mask, n = 1): Mask {
 }
 export const flip = (mask: Mask) => rotate(mask, 2)
 
-export const inBounds = (x: number, y: number) => x >= 0 && x < BOARD_COLS && y >= 0 && y < BOARD_ROWS
-export const isStartCell = (x: number, y: number) => x === START.x && y === START.y
-export const goalAt = (x: number, y: number): number | null =>
-  x === GOAL_COLUMN && (GOAL_ROWS as readonly number[]).includes(y) ? y / 2 : null
-export const goalCell = (goal: number) => ({ x: GOAL_COLUMN, y: GOAL_ROWS[goal] })
+/**
+ * Where everything sits on a board of a given size. Nompong starts at the middle of the left
+ * edge; the three hiding spots sit on the right edge two rows apart, as in the classic layout,
+ * with any extra rows above and below left free for detours.
+ */
+export interface Geometry {
+  cols: number
+  rows: number
+  start: { x: number; y: number }
+  startKey: string
+  goals: { x: number; y: number }[]
+}
+
+const cache = new Map<BoardSize, Geometry>()
+export function geometry(size: BoardSize = 'small'): Geometry {
+  let g = cache.get(size)
+  if (!g) {
+    const { cols, rows } = BOARD_SIZES[size]
+    const mid = Math.floor(rows / 2)
+    g = {
+      cols,
+      rows,
+      start: { x: 0, y: mid },
+      startKey: key(0, mid),
+      goals: [mid - 2, mid, mid + 2].map((y) => ({ x: cols - 1, y })),
+    }
+    cache.set(size, g)
+  }
+  return g
+}
+export const geoOf = (s: Pick<GameState, 'size'>) => geometry(s.size)
+
+export const inBounds = (geo: Geometry, x: number, y: number) => x >= 0 && x < geo.cols && y >= 0 && y < geo.rows
+export const isStartCell = (geo: Geometry, x: number, y: number) => x === geo.start.x && y === geo.start.y
+export function goalAt(geo: Geometry, x: number, y: number): number | null {
+  const i = geo.goals.findIndex((g) => g.x === x && g.y === y)
+  return i < 0 ? null : i
+}
 
 type Board = GameState['board']
 
@@ -24,10 +56,10 @@ type Board = GameState['board']
  * Walks the scent out from Nompong. `reached` is every tile touched by the network;
  * `open` is the subset the scent can travel on from (dead ends are reached but stop it).
  */
-export function network(board: Board): { reached: Set<string>; open: Set<string> } {
-  const reached = new Set([START_KEY])
-  const open = new Set([START_KEY])
-  const queue: [number, number][] = [[START.x, START.y]]
+export function network(geo: Geometry, board: Board): { reached: Set<string>; open: Set<string> } {
+  const reached = new Set([geo.startKey])
+  const open = new Set([geo.startKey])
+  const queue: [number, number][] = [[geo.start.x, geo.start.y]]
   while (queue.length) {
     const [x, y] = queue.shift()!
     const tile = board[key(x, y)]
@@ -46,8 +78,15 @@ export function network(board: Board): { reached: Set<string>; open: Set<string>
 }
 
 /** A trail fits when the cell is free, every neighbouring edge matches, and it touches the open network. */
-export function isLegal(board: Board, x: number, y: number, mask: Mask, open = network(board).open): boolean {
-  if (!inBounds(x, y) || isStartCell(x, y) || goalAt(x, y) !== null || board[key(x, y)]) return false
+export function isLegal(
+  geo: Geometry,
+  board: Board,
+  x: number,
+  y: number,
+  mask: Mask,
+  open = network(geo, board).open,
+): boolean {
+  if (!inBounds(geo, x, y) || isStartCell(geo, x, y) || goalAt(geo, x, y) !== null || board[key(x, y)]) return false
   let connects = false
   for (const [dx, dy, bit, opposite] of DIRS) {
     const k = key(x + dx, y + dy)
@@ -60,14 +99,12 @@ export function isLegal(board: Board, x: number, y: number, mask: Mask, open = n
 }
 
 /** Hiding spots that an open trail now points into. */
-export function goalsReached(board: Board, open = network(board).open): number[] {
+export function goalsReached(geo: Geometry, board: Board, open = network(geo, board).open): number[] {
   const hits: number[] = []
-  GOAL_ROWS.forEach((gy, goal) => {
+  geo.goals.forEach((g, goal) => {
     for (const [dx, dy, bit] of DIRS) {
       // The tile sits on the opposite side of the goal from the direction it points.
-      const tx = GOAL_COLUMN - dx
-      const ty = gy - dy
-      const k = key(tx, ty)
+      const k = key(g.x - dx, g.y - dy)
       if (open.has(k) && board[k].mask & bit) {
         hits.push(goal)
         return
@@ -77,21 +114,36 @@ export function goalsReached(board: Board, open = network(board).open): number[]
   return hits
 }
 
-/** Shortest grid distance from any open trail end to any of `goals`. Infinity when the trail is sealed. */
-export function frontierDistance(board: Board, goals: number[], open = network(board).open): number {
-  let best = Infinity
+/** Empty cells the open trail points into: where the next card could go. */
+export function frontier(geo: Geometry, board: Board, open = network(geo, board).open): { x: number; y: number }[] {
+  const cells: { x: number; y: number }[] = []
   for (const k of open) {
     const [x, y] = k.split(',').map(Number)
-    const tile = board[k]
     for (const [dx, dy, bit] of DIRS) {
       const nx = x + dx
       const ny = y + dy
-      if (!(tile.mask & bit) || !inBounds(nx, ny) || board[key(nx, ny)]) continue
-      for (const g of goals) {
-        const c = goalCell(g)
-        best = Math.min(best, Math.abs(c.x - nx) + Math.abs(c.y - ny))
-      }
+      if (board[k].mask & bit && inBounds(geo, nx, ny) && !board[key(nx, ny)] && goalAt(geo, nx, ny) === null)
+        cells.push({ x: nx, y: ny })
     }
   }
+  return cells
+}
+
+/** Shortest grid distance from any open trail end to any of `goals`. Infinity when the trail is sealed. */
+export function frontierDistance(geo: Geometry, board: Board, goals: number[], open = network(geo, board).open): number {
+  let best = Infinity
+  for (const c of frontier(geo, board, open))
+    for (const g of goals) best = Math.min(best, Math.abs(geo.goals[g].x - c.x) + Math.abs(geo.goals[g].y - c.y))
   return best
+}
+
+/**
+ * True when no open trail end points at a free cell and no hiding spot is reachable: the pack
+ * can only get going again by digging something up.
+ */
+export function isSealed(geo: Geometry, board: Board, revealed: number[]): boolean {
+  const { open } = network(geo, board)
+  const pending = [0, 1, 2].filter((g) => !revealed.includes(g))
+  if (!pending.length) return false
+  return frontier(geo, board, open).length === 0 && goalsReached(geo, board, open).every((g) => revealed.includes(g))
 }

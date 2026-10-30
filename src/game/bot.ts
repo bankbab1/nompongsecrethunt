@@ -1,5 +1,5 @@
-import { flip, frontierDistance, goalCell, goalsReached, isLegal, key, network, START_KEY } from './board'
-import { BOARD_COLS, BOARD_ROWS, DIRS, PERSONAS, type Persona } from './constants'
+import { flip, frontierDistance, geoOf, goalsReached, isLegal, key, network } from './board'
+import { DIRS, PERSONAS, type Persona } from './constants'
 import { packSuspicion } from './suspicion'
 import type { GameState, GoalContent, Move, Rng } from './types'
 
@@ -35,11 +35,12 @@ export function chooseBotMove(s: GameState, rng: Rng): Move {
   const persona = personaOf(s, me)
   const beliefs = treasureBeliefs(s, me)
   const target = argmax(beliefs)
-  const goal = goalCell(target)
-  const { open } = network(s.board)
+  const geo = geoOf(s)
+  const goal = geo.goals[target]
+  const { open } = network(geo, s.board)
   // A sneaky pup plays nice until the trail gets close to the treasure (bolder ones strike
   // earlier), or whenever the pack is already watching it.
-  const threat = frontierDistance(s.board, [target], open)
+  const threat = frontierDistance(geo, s.board, [target], open)
   const lieLow = threat > 4 + persona.bold * 2 || packSuspicion(s, me) > 40
   const sneaky = p.role === 'sneaky' && !(lieLow && rng(100) >= persona.bold * 12)
   // While lying low it still lays trails, but ones that wander rather than race ahead.
@@ -54,15 +55,15 @@ export function chooseBotMove(s: GameState, rng: Rng): Move {
         if (p.broken.length) return
         for (const flipped of [false, true]) {
           const mask = flipped ? flip(c.mask) : c.mask
-          for (let y = 0; y < BOARD_ROWS; y++)
-            for (let x = 0; x < BOARD_COLS; x++) {
-              if (!isLegal(s.board, x, y, mask, open)) continue
+          for (let y = 0; y < geo.rows; y++)
+            for (let x = 0; x < geo.cols; x++) {
+              if (!isLegal(geo, s.board, x, y, mask, open)) continue
               // Closest open edge of the new tile to the target spot.
               let dist = Math.abs(goal.x - x) + Math.abs(goal.y - y) + 2
               for (const [dx, dy, bit] of DIRS)
                 if (mask & bit) dist = Math.min(dist, Math.abs(goal.x - x - dx) + Math.abs(goal.y - y - dy))
               const trial = { ...s.board, [key(x, y)]: { mask, dead: c.dead } }
-              const finishes = !c.dead && goalsReached(trial).includes(target)
+              const finishes = !c.dead && goalsReached(geo, trial).includes(target)
               const score = sneaky
                 ? c.dead
                   ? 16 + x * 1.5 + rng(4)
@@ -96,13 +97,13 @@ export function chooseBotMove(s: GameState, rng: Rng): Move {
       }
       case 'dig': {
         for (const [k, tile] of Object.entries(s.board)) {
-          if (k === START_KEY) continue
+          if (k === geo.startKey) continue
           const [x, y] = k.split(',').map(Number)
           const score = sneaky
             ? open.has(k) && !tile.dead
               ? 8 + x * 1.2
               : -5
-            : tile.dead && network(s.board).reached.has(k)
+            : tile.dead && network(geo, s.board).reached.has(k)
               ? 14
               : -10
           options.push({ move: { kind: 'dig', card, x, y }, score })

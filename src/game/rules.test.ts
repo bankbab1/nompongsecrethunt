@@ -1,4 +1,4 @@
-import { flip, goalsReached, isLegal, key, network } from './board'
+import { flip, geometry, goalsReached, isLegal, isSealed, key, network } from './board'
 import { barkFor, chooseAccusation, chooseBotMove, treasureBeliefs } from './bot'
 import { buildDeck, ROLE_DECK } from './constants'
 import { accuse, applyMove, createMatch, IllegalMove, score, standings, startRound } from './rules'
@@ -12,11 +12,12 @@ function seededRng(seed = 1): Rng {
   }
 }
 
+const geo = geometry('small')
 const names = (n: number) => ['Tester', 'B', 'C', 'D', 'E', 'F', 'G'].slice(0, n)
 
 /** A 4-dog solo match where it's player 0's turn and they hold exactly `hand`. */
 function match(hand: Card[] = [], overrides: Partial<GameState> = {}): GameState {
-  const g = createMatch({ mode: 'solo', names: names(4), now: 0 }, seededRng())
+  const g = createMatch({ mode: 'solo', names: names(4), size: 'small', now: 0 }, seededRng())
   g.turn = 0
   if (hand.length) g.players[0].hand = hand
   return { ...g, ...overrides }
@@ -65,21 +66,21 @@ describe('board', () => {
 
   it('stops the scent at dead ends', () => {
     const board = { ...straightTo(1), '2,2': { mask: 10, dead: true } }
-    const { reached, open } = network(board)
+    const { reached, open } = network(geo, board)
     expect(reached.has('2,2')).toBe(true)
     expect(open.has('2,2')).toBe(false)
-    expect(isLegal(board, 3, 2, 10)).toBe(false)
+    expect(isLegal(geo, board, 3, 2, 10)).toBe(false)
   })
 
   it('requires matching edges and a link to the open network', () => {
     const board = straightTo(1)
-    expect(isLegal(board, 2, 2, 10)).toBe(true)
-    expect(isLegal(board, 2, 2, 5)).toBe(false)
-    expect(isLegal(board, 5, 4, 10)).toBe(false)
+    expect(isLegal(geo, board, 2, 2, 10)).toBe(true)
+    expect(isLegal(geo, board, 2, 2, 5)).toBe(false)
+    expect(isLegal(geo, board, 5, 4, 10)).toBe(false)
   })
 
   it('reaches a hiding spot from the side or from below', () => {
-    expect(goalsReached(straightTo(7))).toEqual([1])
+    expect(goalsReached(geo, straightTo(7))).toEqual([1])
     // Turn up at column 7, step right into column 8, then point up into spot 1 (row 0).
     const detour = {
       ...straightTo(6),
@@ -87,7 +88,31 @@ describe('board', () => {
       '7,1': { mask: 4 | 2, dead: false },
       '8,1': { mask: 8 | 1, dead: false },
     }
-    expect(goalsReached(detour)).toEqual([0])
+    expect(goalsReached(geo, detour)).toEqual([0])
+  })
+})
+
+describe('board sizes', () => {
+  it('keep the hiding spots two rows apart on the right edge with Nompong mid-left', () => {
+    for (const [size, cols, rows] of [['small', 9, 5], ['classic', 11, 7], ['large', 13, 9]] as const) {
+      const g = geometry(size)
+      expect([g.cols, g.rows]).toEqual([cols, rows])
+      expect(g.start).toEqual({ x: 0, y: (rows - 1) / 2 })
+      expect(g.goals.map((p) => p.y)).toEqual([g.start.y - 2, g.start.y, g.start.y + 2])
+      expect(g.goals.every((p) => p.x === cols - 1)).toBe(true)
+    }
+  })
+
+  it('notices when the trail has sealed itself off', () => {
+    // Nompong's crossroads capped on every side by dead ends.
+    const board = {
+      '0,2': { mask: 15, dead: false },
+      '1,2': { mask: 10, dead: true },
+      '0,1': { mask: 5, dead: true },
+      '0,3': { mask: 5, dead: true },
+    }
+    expect(isSealed(geo, board, [])).toBe(true)
+    expect(isSealed(geo, straightTo(3), [])).toBe(false)
   })
 })
 
@@ -225,7 +250,7 @@ describe('computer dogs', () => {
   it('always finish a full three-round match', () => {
     for (let seed = 1; seed <= 12; seed++) {
       const rng = seededRng(seed)
-      let g = createMatch({ mode: 'solo', names: names(3 + (seed % 5)) }, rng)
+      let g = createMatch({ mode: 'solo', names: names(3 + (seed % 5)), size: (['small', 'classic', 'large'] as const)[seed % 3] }, rng)
       g.players[0].persona = 'biscuit' // let the bot drive the human seat too
       let moves = 0
       while (g.phase !== 'matchOver' && moves < 2000) {

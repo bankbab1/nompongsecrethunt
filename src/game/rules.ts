@@ -1,18 +1,19 @@
-import { flip, frontierDistance, goalsReached, isLegal, key, network, START_KEY } from './board'
+import { flip, frontierDistance, geoOf, goalsReached, isLegal, key, network } from './board'
 import {
   buildDeck,
   handSize,
   HUMAN_COLORS,
   LOOT_COUNTS,
-  MISSIONS,
+  MISSION_COUNT,
   PERSONA_IDS,
   PERSONAS,
   ROLE_DECK,
   ROUNDS,
+  DEFAULT_BOARD_SIZE,
   sneakyPayout,
 } from './constants'
 import { bumpAll, initialSuspicion, onAccuse, onBreak, onClaim, onFix, onReveal } from './suspicion'
-import type { GameState, GoalContent, LogEntry, LootCard, Mode, Move, Player, Rng, RoundResult, Side } from './types'
+import type { BoardSize, GameState, GoalContent, LogEntry, LootCard, Mode, Move, Player, Rng, RoundResult, Side } from './types'
 
 export const cryptoRng: Rng = (n) => {
   const a = new Uint32Array(1)
@@ -38,18 +39,19 @@ function log(s: GameState, entry: Omit<LogEntry, 'time'>, now: number) {
 function say(s: GameState, speaker: number, line: string, params: LogEntry['params'], rng: Rng, now: number, force = false) {
   const persona = s.players[speaker].persona
   if (!persona || (!force && rng(100) >= PERSONAS[persona].chat * 100)) return
-  log(s, { icon: PERSONAS[persona].emoji, key: `say.${persona}.${line}`, params: { ...params, v: rng(3) }, speaker }, now)
+  log(s, { key: `say.${persona}.${line}`, params: { ...params, v: rng(3) }, speaker }, now)
 }
 
 export interface NewMatchOptions {
   mode: Mode
   /** Player names; the first is always the person holding the device. */
   names: string[]
+  size?: BoardSize
   previous?: GameState
   now?: number
 }
 
-export function createMatch({ mode, names, previous, now = Date.now() }: NewMatchOptions, rng: Rng): GameState {
+export function createMatch({ mode, names, size = DEFAULT_BOARD_SIZE, previous, now = Date.now() }: NewMatchOptions, rng: Rng): GameState {
   const personas = shuffle([...PERSONA_IDS], rng)
   const players: Player[] = names.map((name, i) => {
     const persona = mode === 'solo' && i > 0 ? personas[i - 1] : null
@@ -71,6 +73,7 @@ export function createMatch({ mode, names, previous, now = Date.now() }: NewMatc
     version: 2,
     match: (previous?.match ?? 0) + 1,
     mode,
+    size,
     round: 0,
     phase: 'playing',
     mission: 0,
@@ -101,18 +104,19 @@ export function startRound(state: GameState, rng: Rng, now = Date.now(), lastMis
   const roles = shuffle([...Array(sneaky).fill('sneaky'), ...Array(hunters).fill('hunter')], rng)
   const deck = shuffle(buildDeck(), rng)
 
-  let mission = rng(MISSIONS.length)
-  if (mission === lastMission) mission = (mission + 1 + rng(MISSIONS.length - 1)) % MISSIONS.length
+  let mission = rng(MISSION_COUNT)
+  if (mission === lastMission) mission = (mission + 1 + rng(MISSION_COUNT - 1)) % MISSION_COUNT
 
   s.round += 1
   s.phase = 'playing'
   s.mission = mission
   s.treasure = rng(3)
-  s.board = { [START_KEY]: { mask: 15, dead: false } }
+  s.board = { [geoOf(s).startKey]: { mask: 15, dead: false } }
   s.revealed = []
   s.claims = []
   s.accusations = []
   s.result = undefined
+  s.lastAction = undefined
   s.accusedThisTurn = false
   s.players.forEach((p, i) => {
     p.role = roles[i]
@@ -124,7 +128,7 @@ export function startRound(state: GameState, rng: Rng, now = Date.now(), lastMis
   s.suspicion = initialSuspicion(s.players)
   if (s.round > 1) s.roundStarter = (s.roundStarter + 1) % n
   s.turn = s.roundStarter
-  log(s, { icon: '🌱', key: 'log.roundStart', params: { round: s.round, item: MISSIONS[mission] } }, now)
+  log(s, { key: 'log.roundStart', params: { round: s.round, item: mission } }, now)
   return s
 }
 
@@ -139,7 +143,7 @@ export function accuse(state: GameState, target: number, rng: Rng, now = Date.no
   s.accusations.push({ by: s.turn, target })
   onAccuse(s, s.turn, target)
   if (me.persona) say(s, s.turn, 'accuse', { target: s.players[target].name }, rng, now, true)
-  else log(s, { icon: '👉', key: 'log.accuse', params: { name: me.name, target: s.players[target].name } }, now)
+  else log(s, { key: 'log.accuse', params: { name: me.name, target: s.players[target].name } }, now)
   say(s, target, 'defend', { name: me.name }, rng, now)
   return s
 }
@@ -157,27 +161,35 @@ export function applyMove(state: GameState, move: Move, rng: Rng, now = Date.now
   if (!card) throw new IllegalMove('error.noCard')
   if (move.kind !== 'pass' && card.type !== move.kind) throw new IllegalMove('error.wrongCard')
 
+  s.lastAction = {
+    player: actor,
+    kind: move.kind,
+    ...('x' in move ? { x: move.x, y: move.y } : {}),
+    ...('target' in move ? { target: move.target } : {}),
+    ...(move.kind === 'sniff' ? { goal: move.goal } : {}),
+  }
   switch (move.kind) {
     case 'path': {
       if (card.type !== 'path') break
       if (p.broken.length) throw new IllegalMove('error.broken')
       const mask = move.flipped ? flip(card.mask) : card.mask
-      const before = network(s.board)
-      if (!isLegal(s.board, move.x, move.y, mask, before.open)) throw new IllegalMove('error.illegalPath')
+      const geo = geoOf(s)
+      const before = network(geo, s.board)
+      if (!isLegal(geo, s.board, move.x, move.y, mask, before.open)) throw new IllegalMove('error.illegalPath')
       const unrevealed = [0, 1, 2].filter((g) => !s.revealed.includes(g))
-      const distBefore = frontierDistance(s.board, unrevealed, before.open)
+      const distBefore = frontierDistance(geo, s.board, unrevealed, before.open)
       s.board[key(move.x, move.y)] = { mask, dead: card.dead }
-      const after = network(s.board)
+      const after = network(geo, s.board)
       if (card.dead) bumpAll(s, actor, 9)
-      else bumpAll(s, actor, frontierDistance(s.board, unrevealed, after.open) < distBefore ? -3 : 0)
-      log(s, { icon: card.dead ? '🚧' : '🐾', key: card.dead ? 'log.deadEnd' : 'log.path', params: { name: p.name } }, now)
+      else bumpAll(s, actor, frontierDistance(geo, s.board, unrevealed, after.open) < distBefore ? -3 : 0)
+      log(s, { key: card.dead ? 'log.deadEnd' : 'log.path', params: { name: p.name } }, now)
 
-      for (const goal of goalsReached(s.board, after.open)) {
+      for (const goal of goalsReached(geo, s.board, after.open)) {
         if (s.revealed.includes(goal)) continue
         s.revealed.push(goal)
         onReveal(s, goal)
         if (goal === s.treasure) return endRound(s, 'hunters', now, actor)
-        log(s, { icon: '🪨', key: 'log.rock', params: { spot: goal + 1 } }, now)
+        log(s, { key: 'log.rock', params: { spot: goal + 1 } }, now)
       }
       break
     }
@@ -185,24 +197,24 @@ export function applyMove(state: GameState, move: Move, rng: Rng, now = Date.now
       if (move.goal < 0 || move.goal > 2) throw new IllegalMove('error.pickSpot')
       const truth: GoalContent = move.goal === s.treasure ? 'treasure' : 'rock'
       s.knowledge[actor][move.goal] = truth
-      log(s, { icon: '👃', key: 'log.sniff', params: { name: p.name, spot: move.goal + 1 } }, now)
+      log(s, { key: 'log.sniff', params: { name: p.name, spot: move.goal + 1 } }, now)
       if (move.claim) {
         s.claims.push({ by: actor, goal: move.goal, says: move.claim })
         onClaim(s, actor, move.goal, move.claim)
         const line = move.claim === 'treasure' ? 'claimTreasure' : 'claimRock'
         if (p.persona) say(s, actor, line, { spot: move.goal + 1 }, rng, now, true)
-        else log(s, { icon: '📣', key: `log.${line}`, params: { name: p.name, spot: move.goal + 1 } }, now)
+        else log(s, { key: `log.${line}`, params: { name: p.name, spot: move.goal + 1 } }, now)
       }
       break
     }
     case 'dig': {
       const k = key(move.x, move.y)
       const tile = s.board[k]
-      if (!tile || k === START_KEY) throw new IllegalMove('error.dig')
-      const { open } = network(s.board)
+      if (!tile || k === geoOf(s).startKey) throw new IllegalMove('error.dig')
+      const { open } = network(geoOf(s), s.board)
       bumpAll(s, actor, tile.dead ? -10 : open.has(k) ? 10 : 3)
       delete s.board[k]
-      log(s, { icon: '🪏', key: tile.dead ? 'log.digDeadEnd' : 'log.dig', params: { name: p.name } }, now)
+      log(s, { key: tile.dead ? 'log.digDeadEnd' : 'log.dig', params: { name: p.name } }, now)
       break
     }
     case 'break': {
@@ -212,7 +224,7 @@ export function applyMove(state: GameState, move: Move, rng: Rng, now = Date.now
       if (target.broken.includes(card.tool)) throw new IllegalMove('error.alreadyBroken')
       target.broken.push(card.tool)
       onBreak(s, actor, move.target)
-      log(s, { icon: '😈', key: 'log.break', params: { name: p.name, target: target.name, tool: card.tool } }, now)
+      log(s, { key: 'log.break', params: { name: p.name, target: target.name, tool: card.tool } }, now)
       say(s, move.target, 'broken', { name: p.name, tool: card.tool }, rng, now)
       break
     }
@@ -224,12 +236,12 @@ export function applyMove(state: GameState, move: Move, rng: Rng, now = Date.now
       target.broken = target.broken.filter((t) => t !== tool)
       onFix(s, actor, move.target)
       const self = move.target === actor
-      log(s, { icon: '💚', key: self ? 'log.fixSelf' : 'log.fix', params: { name: p.name, target: target.name, tool } }, now)
+      log(s, { key: self ? 'log.fixSelf' : 'log.fix', params: { name: p.name, target: target.name, tool } }, now)
       if (!self) say(s, move.target, 'thanks', { name: p.name }, rng, now)
       break
     }
     case 'pass':
-      log(s, { icon: '🍃', key: 'log.pass', params: { name: p.name } }, now)
+      log(s, { key: 'log.pass', params: { name: p.name } }, now)
       break
   }
 
@@ -280,8 +292,8 @@ function endRound(s: GameState, winner: Side, now: number, finder?: number): Gam
   s.result = { winner, finder, payouts: payouts.filter((x) => x.loot.length) }
   s.phase = s.round >= ROUNDS ? 'matchOver' : 'roundOver'
   if (winner === 'hunters')
-    log(s, { icon: '🎉', key: 'log.found', params: { name: s.players[finder!].name, item: MISSIONS[s.mission] } }, now)
-  else log(s, { icon: '🐿️', key: 'log.sneakyWin', params: {} }, now)
+    log(s, { key: 'log.found', params: { name: s.players[finder!].name, item: s.mission } }, now)
+  else log(s, { key: 'log.sneakyWin', params: {} }, now)
   return s
 }
 

@@ -11,6 +11,7 @@ const dicts: Record<Lang, Record<string, string | string[]>> = { en, th }
 /** Params that are themselves message keys (tool names, mission items) get translated too. */
 function resolveParam(lang: Lang, name: string, value: string | number): string {
   if (name === 'tool') return translate(lang, `tool.${value}`)
+  if (name === 'item' && typeof value === 'number') return translate(lang, `mission.${value}`)
   return String(value)
 }
 

@@ -3,11 +3,11 @@ import { App } from './App'
 import { useGameStore } from './store/gameStore'
 
 describe('App', () => {
-  it('starts on the setup dialog, then shows the 9×5 garden and your hand', () => {
+  it('starts on the setup dialog, then shows the classic 11×7 garden', () => {
     render(<App />)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /ไปตามกลิ่น|follow the scent/i }))
-    expect(screen.getByLabelText(/กระดานล่าสมบัติ|Treasure hunt board/).children).toHaveLength(45)
+    expect(screen.getByLabelText(/กระดานล่าสมบัติ|Treasure hunt board/).children).toHaveLength(77)
     expect(screen.getAllByLabelText(/จุดซ่อนที่|Hiding spot/)).toHaveLength(3)
   })
 

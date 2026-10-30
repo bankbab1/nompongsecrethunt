@@ -56,7 +56,7 @@ export const secondaryButton = 'w-full rounded-[10px] bg-[#eaf0df] p-3.5 text-sm
 export function DialogHeading({ icon, eyebrow, title }: { icon: ReactNode; eyebrow?: string; title: string }) {
   return (
     <>
-      <div className="text-6xl">{icon}</div>
+      <div className="flex justify-center text-[#4d6b42]">{icon}</div>
       {eyebrow && <div className="mt-2 text-[10px] font-bold tracking-[2px] text-subtle">{eyebrow}</div>}
       <h2 className="my-3 text-2xl font-bold tracking-tight sm:text-[27px]">{title}</h2>
     </>

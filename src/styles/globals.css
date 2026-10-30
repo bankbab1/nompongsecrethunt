@@ -34,11 +34,6 @@ button:not(:disabled) {
   scrollbar-color: var(--color-line-strong) transparent;
 }
 
-/* The board tilts back a little, like a garden seen from the porch. */
-.board-tilt {
-  transform: perspective(1200px) rotateX(16deg);
-}
-
 /* Moonlight and blossom worlds recolour the backdrop rather than redrawing it. */
 .theme-night .garden-backdrop {
   filter: hue-rotate(42deg) saturate(0.55) brightness(0.55);

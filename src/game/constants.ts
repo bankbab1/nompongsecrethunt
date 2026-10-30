@@ -1,10 +1,15 @@
-import type { Card, PersonaId, Theme, Tool } from './types'
+import type { BoardSize, Card, PersonaId, Theme, Tool } from './types'
 
-export const BOARD_COLS = 9
-export const BOARD_ROWS = 5
-export const START = { x: 0, y: 2 } as const
-export const GOAL_COLUMN = 8
-export const GOAL_ROWS = [0, 2, 4] as const
+/**
+ * Board sizes. The classic tunnel layout has the hiding spots eight columns from the start;
+ * bigger boards add room around them so a blocked trail can still find a way round.
+ */
+export const BOARD_SIZES: Record<BoardSize, { cols: number; rows: number }> = {
+  small: { cols: 9, rows: 5 },
+  classic: { cols: 11, rows: 7 },
+  large: { cols: 13, rows: 9 },
+}
+export const DEFAULT_BOARD_SIZE: BoardSize = 'classic'
 export const ROUNDS = 3
 export const MIN_PLAYERS = 3
 export const MAX_PLAYERS = 7
@@ -29,11 +34,6 @@ export const ROLE_DECK: Record<number, { sneaky: number; hunters: number }> = {
 export const handSize = (players: number) => (players <= 5 ? 6 : 5)
 
 export const TOOLS: Tool[] = ['leash', 'nose', 'paw']
-export const TOOL_ICONS: Record<Tool, { broken: string; fixed: string }> = {
-  leash: { broken: '🪢', fixed: '🦮' },
-  nose: { broken: '🤧', fixed: '🌸' },
-  paw: { broken: '🌵', fixed: '🩹' },
-}
 
 /** 40 trails (9 dead ends) and 27 actions, the same mix as the classic tunnel game. */
 export function buildDeck(): Card[] {
@@ -65,10 +65,9 @@ export function buildDeck(): Card[] {
 }
 
 /** What Nompong hunts for each round. */
-export const MISSIONS = ['🦴', '🦆', '🩴', '🍗', '🧸', '🎾'] as const
+export const MISSION_COUNT = 6
 
 /** Loot is Nompong's stuff, worth 1–3 points. 16 / 8 / 4 cards per match. */
-export const LOOT_ITEMS = { 1: ['🍪', '🎾', '🦆'], 2: ['🧸', '🩴'], 3: ['🦴', '👑'] } as const
 export const LOOT_COUNTS = { 1: 16, 2: 8, 3: 4 } as const
 /** Points each sneaky pup takes when they win, by how many sneaky pups there were. */
 export const sneakyPayout = (count: number) => (count === 1 ? 4 : count <= 3 ? 3 : 2)
@@ -76,7 +75,6 @@ export const sneakyPayout = (count: number) => (count === 1 ? 4 : count <= 3 ? 3
 export interface Persona {
   id: PersonaId
   name: string
-  emoji: string
   color: string
   /** How strongly evidence moves this dog's suspicion. */
   gain: number
@@ -98,17 +96,16 @@ export interface Persona {
 }
 
 export const PERSONAS: Record<PersonaId, Persona> = {
-  mochi: { id: 'mochi', name: 'Mochi', emoji: '🐶', color: '#e3ddd0', gain: 0.6, baseline: 0, accuseAt: 75, lieSneaky: 0.45, lieHunter: 0, silent: 0.1, bold: 0.3, grudge: 5, chat: 0.6 },
-  biscuit: { id: 'biscuit', name: 'Biscuit', emoji: '🤓', color: '#caa07d', gain: 1.35, baseline: 5, accuseAt: 55, lieSneaky: 0.6, lieHunter: 0, silent: 0.15, bold: 0.45, grudge: 8, chat: 0.6 },
-  pepper: { id: 'pepper', name: 'Pepper', emoji: '🦊', color: '#77766c', gain: 0.9, baseline: 5, accuseAt: 85, lieSneaky: 0.9, lieHunter: 0.15, silent: 0.05, bold: 0.6, grudge: 5, chat: 0.85 },
-  coco: { id: 'coco', name: 'Coco', emoji: '😤', color: '#eed8a6', gain: 1.1, baseline: 10, accuseAt: 40, lieSneaky: 0.6, lieHunter: 0, silent: 0.05, bold: 0.7, grudge: 35, chat: 0.95 },
-  milo: { id: 'milo', name: 'Milo', emoji: '😴', color: '#bd8f65', gain: 0.5, baseline: 0, accuseAt: 90, lieSneaky: 0.5, lieHunter: 0, silent: 0.45, bold: 0.25, grudge: 0, chat: 0.3 },
-  taro: { id: 'taro', name: 'Taro', emoji: '🐺', color: '#9a9488', gain: 1.2, baseline: 20, accuseAt: 50, lieSneaky: 0.7, lieHunter: 0, silent: 0.2, bold: 0.85, grudge: 20, chat: 0.6 },
+  mochi: { id: 'mochi', name: 'Mochi', color: '#e3ddd0', gain: 0.6, baseline: 0, accuseAt: 75, lieSneaky: 0.45, lieHunter: 0, silent: 0.1, bold: 0.3, grudge: 5, chat: 0.6 },
+  biscuit: { id: 'biscuit', name: 'Biscuit', color: '#caa07d', gain: 1.35, baseline: 5, accuseAt: 55, lieSneaky: 0.6, lieHunter: 0, silent: 0.15, bold: 0.45, grudge: 8, chat: 0.6 },
+  pepper: { id: 'pepper', name: 'Pepper', color: '#77766c', gain: 0.9, baseline: 5, accuseAt: 85, lieSneaky: 0.9, lieHunter: 0.15, silent: 0.05, bold: 0.6, grudge: 5, chat: 0.85 },
+  coco: { id: 'coco', name: 'Coco', color: '#eed8a6', gain: 1.1, baseline: 10, accuseAt: 40, lieSneaky: 0.6, lieHunter: 0, silent: 0.05, bold: 0.7, grudge: 35, chat: 0.95 },
+  milo: { id: 'milo', name: 'Milo', color: '#bd8f65', gain: 0.5, baseline: 0, accuseAt: 90, lieSneaky: 0.5, lieHunter: 0, silent: 0.45, bold: 0.25, grudge: 0, chat: 0.3 },
+  taro: { id: 'taro', name: 'Taro', color: '#9a9488', gain: 1.2, baseline: 20, accuseAt: 50, lieSneaky: 0.7, lieHunter: 0, silent: 0.2, bold: 0.85, grudge: 20, chat: 0.6 },
 }
 export const PERSONA_IDS = Object.keys(PERSONAS) as PersonaId[]
 
 export const HUMAN_COLORS = ['#e9c47e', '#e3ddd0', '#caa07d', '#77766c', '#eed8a6', '#bd8f65', '#9a9488'] as const
 export const AVATAR_BACKGROUNDS = ['#f2e6c7', '#ece8dd', '#efdece', '#e4e5dd', '#efe5cd', '#eddbca', '#e6e3dc'] as const
 export const COLLAR_COLORS = ['#819a58', '#c4a274', '#859d96', '#b69a90'] as const
-export const GOAL_DECOYS = ['🌳', '🧺', '🌼'] as const
-export const THEME_ICONS: Record<Theme, string> = { garden: '☀', night: '☾', pink: '❀' }
+export const THEMES: Theme[] = ['garden', 'night', 'pink']

@@ -1,8 +1,7 @@
-import { TOOL_ICONS } from '@/game/constants'
 import type { Card } from '@/game/types'
 import type { Params } from '@/i18n'
 
-/** Display name key, icon, and help text key for each card. */
+/** Display name key and help text key for each card; the picture lives in components/icons. */
 export function cardNameKey(card: Card): string {
   switch (card.type) {
     case 'path':
@@ -13,21 +12,6 @@ export function cardNameKey(card: Card): string {
       return card.tools.length > 1 ? 'card.fix.double' : `card.fix.${card.tools[0]}`
     default:
       return `card.${card.type}`
-  }
-}
-
-export function cardIcon(card: Card): string {
-  switch (card.type) {
-    case 'sniff':
-      return '👃'
-    case 'dig':
-      return '🪏'
-    case 'break':
-      return TOOL_ICONS[card.tool].broken
-    case 'fix':
-      return card.tools.map((t) => TOOL_ICONS[t].fixed).join('')
-    default:
-      return '🐾'
   }
 }
 

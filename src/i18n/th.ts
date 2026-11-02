@@ -130,6 +130,7 @@ export const th: Record<MessageKey, string | string[]> = {
   'error.alreadyBroken': 'อันนั้นพังอยู่แล้ว',
   'error.nothingToFix': 'ตูบตัวนี้ไม่มีอะไรที่การ์ดใบนี้ซ่อมได้',
 
+  'dialog.close': 'ปิด',
   'setup.eyebrow': 'มีของดีซ่อนอยู่',
   'setup.title': 'การผจญภัยเริ่มที่นี่',
   'setup.body': 'สามรอบ กับแก๊งตูบขี้สงสัย\nและอาจมีใครบางตัวที่มีแผนแสบ ๆ',

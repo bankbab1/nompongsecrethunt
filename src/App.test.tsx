@@ -18,4 +18,24 @@ describe('App', () => {
     act(() => useGameStore.getState().setLang('en'))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Little paws.')
   })
+
+  it('closes a dialog by tapping outside it or on the close button', () => {
+    render(<App />)
+    act(() => useGameStore.getState().openModal({ kind: 'help' }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(dialog.parentElement!)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    act(() => useGameStore.getState().openModal({ kind: 'help' }))
+    fireEvent.click(screen.getByRole('button', { name: /^(ปิด|Close)$/ }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps must-answer dialogs open when tapping outside', () => {
+    render(<App />)
+    act(() => useGameStore.getState().openModal({ kind: 'peek', goal: 0 }))
+    fireEvent.click(screen.getByRole('dialog').parentElement!)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^(ปิด|Close)$/ })).not.toBeInTheDocument()
+  })
 })

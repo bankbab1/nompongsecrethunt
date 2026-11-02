@@ -51,6 +51,39 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
     },
   ]
 
+  const themePicker = THEMES.map((theme) => {
+    const Icon = THEME_ICONS[theme]
+    return (
+      <button
+        key={theme}
+        type="button"
+        aria-label={t(`world.${theme}`)}
+        aria-pressed={game.theme === theme}
+        onClick={() => setTheme(theme)}
+        className={clsx(
+          'grid size-7 place-items-center rounded-full pointer-coarse:size-8',
+          game.theme === theme ? 'bg-brand-700 text-white' : 'text-slate-500 hover:text-slate-900',
+        )}
+      >
+        <Icon size={15} />
+      </button>
+    )
+  })
+
+  const toolButtons = (shape: string) =>
+    tools.map(({ label, Icon, onClick }) => (
+      <button
+        key={label}
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={onClick}
+        className={clsx('grid place-items-center border-slate-100 text-slate-700 hover:bg-slate-50 active:bg-brand-50', shape)}
+      >
+        <Icon size={16} strokeWidth={2} />
+      </button>
+    ))
+
   return (
     <>
       <div className="hidden items-center gap-3 px-6 py-4 md:flex">
@@ -69,9 +102,9 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
           'relative overflow-hidden bg-meadow',
           {
             // Phones: fill the gap between the turn bar and the pinned hand, so nothing overlaps.
-            small: 'h-[max(280px,calc(100dvh-390px))] md:h-[440px] min-[1450px]:h-[490px]',
-            classic: 'h-[max(280px,calc(100dvh-390px))] md:h-[520px] min-[1450px]:h-[580px]',
-            large: 'h-[max(280px,calc(100dvh-390px))] md:h-[600px] min-[1450px]:h-[660px]',
+            small: 'h-[max(260px,calc(100dvh-440px))] md:h-[440px] min-[1450px]:h-[490px]',
+            classic: 'h-[max(260px,calc(100dvh-440px))] md:h-[520px] min-[1450px]:h-[580px]',
+            large: 'h-[max(260px,calc(100dvh-440px))] md:h-[600px] min-[1450px]:h-[660px]',
           }[game.size ?? 'small'],
           game.theme === 'night' && 'bg-[#60786d]',
         )}
@@ -88,27 +121,12 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
           </div>
         </div>
 
-        <div className="absolute top-2.5 right-2.5 z-20 flex gap-1 rounded-full bg-white/70 p-1 md:top-4 md:right-4">
-          {THEMES.map((theme) => {
-            const Icon = THEME_ICONS[theme]
-            return (
-              <button
-                key={theme}
-                type="button"
-                aria-label={t(`world.${theme}`)}
-                aria-pressed={game.theme === theme}
-                onClick={() => setTheme(theme)}
-                className={clsx('grid size-7 place-items-center rounded-full', game.theme === theme ? 'bg-brand-700 text-white' : 'text-slate-500 hover:text-slate-900')}
-              >
-                <Icon size={15} />
-              </button>
-            )
-          })}
-        </div>
+        {/* Desktop: map controls float over the garden. Phones get them in a row under it. */}
+        <div className="absolute top-4 right-4 z-20 hidden rounded-full bg-white/70 p-1 md:flex">{themePicker}</div>
 
         <div
           {...orbit}
-          className="absolute inset-[50px_44px_48px_6px] flex cursor-grab touch-none items-center justify-center active:cursor-grabbing md:inset-[72px_64px_60px_4%]"
+          className="absolute inset-[50px_16px_44px_16px] flex cursor-grab touch-none items-center justify-center active:cursor-grabbing md:inset-[72px_64px_60px_4%]"
         >
           <Board />
         </div>
@@ -124,19 +142,8 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
           </div>
         )}
 
-        <div className="absolute top-12 right-2 z-20 flex flex-col overflow-hidden rounded-xl bg-white/90 shadow-sm shadow-slate-900/10 md:top-1/2 md:right-4 md:-translate-y-1/2">
-          {tools.map(({ label, Icon, onClick }) => (
-            <button
-              key={label}
-              type="button"
-              aria-label={label}
-              title={label}
-              onClick={onClick}
-              className="grid size-8 place-items-center border-b border-slate-100 text-slate-700 last:border-b-0 hover:bg-slate-50 active:bg-brand-50 md:size-9"
-            >
-              <Icon size={16} strokeWidth={2} />
-            </button>
-          ))}
+        <div className="absolute top-1/2 right-4 z-20 hidden -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-white/90 shadow-sm shadow-slate-900/10 md:flex">
+          {toolButtons('border-b last:border-b-0 size-9')}
         </div>
 
         {last && (
@@ -164,6 +171,11 @@ export function Scene({ reactions, secondsLeft }: { reactions: FloatingReaction[
             />
           )
         })}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-white px-3 py-2 md:hidden">
+        <div className="flex gap-1 rounded-full bg-slate-100 p-1">{themePicker}</div>
+        <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white">{toolButtons('border-r last:border-r-0 h-9 w-10')}</div>
       </div>
     </>
   )

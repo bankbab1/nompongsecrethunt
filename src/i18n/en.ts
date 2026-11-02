@@ -131,6 +131,7 @@ export const en = {
   'error.alreadyBroken': 'That one’s already spoiled.',
   'error.nothingToFix': 'That dog has nothing this card can fix.',
 
+  'dialog.close': 'Close',
   'setup.eyebrow': 'SOMETHING GOOD IS HIDING',
   'setup.title': 'Adventure starts here.',
   'setup.body': 'Three rounds. A pack of curious dogs.\nAnd maybe someone with a sneaky little plan.',
